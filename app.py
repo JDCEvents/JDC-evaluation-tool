@@ -522,7 +522,7 @@ with tabs[1]:
 
 # ---------- TAB 2: DATEN & EXPORT ----------
 with tabs[2]:
-    st.subheader("Daten & Export")
+    st.subheader("Bewertungen")
 
     df_all = backend.load().copy()
 
