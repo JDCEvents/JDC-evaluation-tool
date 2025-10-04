@@ -1,4 +1,4 @@
-# app.py (JDC evaluation tool v3, Keyboard-Input Edition)
+# app.py (JDC evaluation tool v3 – robuste Links + Keyboard-Input)
 # --------------------------------------------------------------------
 # WOFÜR IST DIESE DATEI?
 # - Dies ist die HAUPTDATEI deiner Streamlit-App.
@@ -18,6 +18,7 @@ import pathlib, json
 # - Wird in der Sidebar genutzt, um komplette Orga-/Jury-Links anzuzeigen.
 # - Setz das in Streamlit "Secrets" (Settings → Secrets) als "base_url",
 #   dann verschwindet der Platzhalter <YOUR-APP>.
+#   (Du hast das schon: base_url = "https://deine-app.streamlit.app")
 # --------------------------------------------------------------------
 BASE_URL = st.secrets.get("base_url", "https://<YOUR-APP>.streamlit.app")
 
@@ -27,8 +28,14 @@ BASE_URL = st.secrets.get("base_url", "https://<YOUR-APP>.streamlit.app")
 # - DOUBLE_CATS: Welche Kategorien zählen doppelt (x2) für die Gesamtpunkte
 #   → Max 70 Punkte (2 doppelt, 3 einfach)
 # --------------------------------------------------------------------
-CATEGORIES = ["Synchronität","Schwierigkeit der Choreographie","Choreographie","Bilder und Linien","Ausdruck und Bühnenpräsenz"]
-DOUBLE_CATS = ["Synchronität","Schwierigkeit der Choreographie"]
+CATEGORIES = [
+    "Synchronität",
+    "Schwierigkeit der Choreographie",
+    "Choreographie",
+    "Bilder und Linien",
+    "Ausdruck und Bühnenpräsenz",
+]
+DOUBLE_CATS = ["Synchronität", "Schwierigkeit der Choreographie"]
 
 # --------------------------------------------------------------------
 # CONFIG-MANAGER
@@ -121,15 +128,17 @@ class ConfigManager:
 
     def rename_crew(self, age_group: str, old: str, new: str):
         # Crew umbenennen (Startnummer bleibt erhalten)
-        if not new or old == new: return
+        if not new or old == new:
+            return
         crews = self.data.setdefault("crews_by_age", {}).setdefault(age_group, [])
         if old in crews and new not in crews:
             idx = crews.index(old)
             crews[idx] = new
             # preserve start number mapping
             sn = self.data.setdefault("start_numbers", {}).setdefault(age_group, {})
-            sn[new] = sn.get(old, sn.get(new, None)) or (idx+1)
-            if old in sn: del sn[old]
+            sn[new] = sn.get(old, sn.get(new, None)) or (idx + 1)
+            if old in sn:
+                del sn[old]
             self.save()
 
     # ----- jurors -----
@@ -143,7 +152,7 @@ class ConfigManager:
         seen = set()
         for j in jurors:
             name = (j.get("name") or "").strip()
-            pin  = str(j.get("pin") or "").strip()
+            pin = str(j.get("pin") or "").strip()
             if name and name.lower() not in seen:
                 seen.add(name.lower())
                 clean.append({"name": name, "pin": pin})
@@ -188,22 +197,28 @@ class CSVBackend:
     def __init__(self, path: str = "data.csv"):
         self.path = path
         if not pathlib.Path(self.path).exists():
-            df = pd.DataFrame(columns=["timestamp","round","age_group","crew","judge", *CATEGORIES, "TotalWeighted"])
+            df = pd.DataFrame(
+                columns=["timestamp", "round", "age_group", "crew", "judge", *CATEGORIES, "TotalWeighted"]
+            )
             df.to_csv(self.path, index=False)
 
     def load(self) -> pd.DataFrame:
         # CSV laden, Spalten sicherstellen
         try:
             df = pd.read_csv(self.path)
-            if "TotalWeighted" not in df.columns: df["TotalWeighted"] = 0
-            if "age_group" not in df.columns: df["age_group"] = ""
+            if "TotalWeighted" not in df.columns:
+                df["TotalWeighted"] = 0
+            if "age_group" not in df.columns:
+                df["age_group"] = ""
             return df
         except Exception:
-            return pd.DataFrame(columns=["timestamp","round","age_group","crew","judge", *CATEGORIES, "TotalWeighted"])
+            return pd.DataFrame(
+                columns=["timestamp", "round", "age_group", "crew", "judge", *CATEGORIES, "TotalWeighted"]
+            )
 
     def _compute_weighted(self, row: Dict) -> int:
         # Gesamtpunkte mit Gewichtung (x2 für DOUBLE_CATS)
-        return int(sum((row.get(c,0) or 0) * (2 if c in DOUBLE_CATS else 1) for c in CATEGORIES))
+        return int(sum((row.get(c, 0) or 0) * (2 if c in DOUBLE_CATS else 1) for c in CATEGORIES))
 
     def upsert_row(self, key_cols: List[str], row: Dict):
         # Entweder vorhandene Zeile (nach key_cols) aktualisieren oder neue Zeile anhängen
@@ -213,11 +228,13 @@ class CSVBackend:
         if df.empty:
             df = pd.DataFrame([row])
         else:
-            mask = pd.Series([True]*len(df))
-            for k in key_cols: mask = mask & (df[k] == row[k])
+            mask = pd.Series([True] * len(df))
+            for k in key_cols:
+                mask = mask & (df[k] == row[k])
             if mask.any():
                 idx = mask[mask].index[0]
-                for k,v in row.items(): df.at[idx, k] = v
+                for k, v in row.items():
+                    df.at[idx, k] = v
             else:
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         df.to_csv(self.path, index=False)
@@ -232,24 +249,44 @@ backend = CSVBackend("data.csv")
 # --------------------------------------------------------------------
 def compute_leaderboard(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["Rank","Crew","Judges","Total","Tens","DoubleCatSum","MedianJudge","MaxJudge"])
+        return pd.DataFrame(columns=["Rank", "Crew", "Judges", "Total", "Tens", "DoubleCatSum", "MedianJudge", "MaxJudge"])
     for c in CATEGORIES:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
     df["JudgeTotal"] = sum(df[c] * (2 if c in DOUBLE_CATS else 1) for c in CATEGORIES)
-    df["TensHere"] = df.apply(lambda r: sum(1 for c in CATEGORIES if r[c]==10), axis=1)
+    df["TensHere"] = df.apply(lambda r: sum(1 for c in CATEGORIES if r[c] == 10), axis=1)
     df["DoubleHere"] = df.apply(lambda r: sum(r[c] for c in DOUBLE_CATS), axis=1)
-    agg = df.groupby("crew", as_index=False).agg(
-        Judges=("JudgeTotal","count"),
-        Total=("JudgeTotal","sum"),
-        Tens=("TensHere","sum"),
-        DoubleCatSum=("DoubleHere","sum"),
-        MedianJudge=("JudgeTotal","median"),
-        MaxJudge=("JudgeTotal","max")
-    ).rename(columns={"crew":"Crew"})
-    agg = agg.sort_values(by=["Total","Tens","DoubleCatSum","MedianJudge","MaxJudge","Crew"],
-                          ascending=[False,False,False,False,False,True], kind="mergesort").reset_index(drop=True)
-    agg.insert(0,"Rank",agg.index+1)
+    agg = (
+        df.groupby("crew", as_index=False)
+        .agg(
+            Judges=("JudgeTotal", "count"),
+            Total=("JudgeTotal", "sum"),
+            Tens=("TensHere", "sum"),
+            DoubleCatSum=("DoubleHere", "sum"),
+            MedianJudge=("JudgeTotal", "median"),
+            MaxJudge=("JudgeTotal", "max"),
+        )
+        .rename(columns={"crew": "Crew"})
+    )
+    agg = agg.sort_values(
+        by=["Total", "Tens", "DoubleCatSum", "MedianJudge", "MaxJudge", "Crew"],
+        ascending=[False, False, False, False, False, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
+    agg.insert(0, "Rank", agg.index + 1)
     return agg
+
+# --------------------------------------------------------------------
+# QUERY-PARAM-HELPER (WICHTIG!)
+# - _qp_get macht die App robust gegenüber Streamlit-Versionen:
+#   Manche Versionen liefern Strings, andere Listen bei st.query_params.
+# - So verhindern wir den Bug, dass nur der erste Buchstabe gelesen wird.
+# --------------------------------------------------------------------
+def _qp_get(name: str):
+    """Holt einen Query-Parameter robust (unterstützt String oder Liste)."""
+    val = st.query_params.get(name)
+    if isinstance(val, list):
+        return val[0]
+    return val
 
 # --------------------------------------------------------------------
 # AUTH / PARAMETER-LOCKS
@@ -258,24 +295,22 @@ def compute_leaderboard(df: pd.DataFrame) -> pd.DataFrame:
 # - is_orga_mode: Prüft Orga-Modus (?orga=1&orgapin=XXXX), vergleicht Secrets.
 # --------------------------------------------------------------------
 def get_locked_judge() -> Optional[str]:
-    params = st.query_params
-    j = params.get("judge", [None])[0]
-    pin = params.get("pin", [None])[0]
+    j = (_qp_get("judge") or "").strip()
+    pin = (_qp_get("pin") or "").strip()
     if not j:
         return None
-    expected = JUDGE_PINS.get(j)
-    if expected is None or pin != expected:
+    expected = str(JUDGE_PINS.get(j, "")).strip()
+    if not expected or pin != expected:
         st.error("Falscher oder fehlender PIN für diesen Juror.")
         return None
     return j
 
 def is_orga_mode() -> bool:
-    params = st.query_params
-    val = params.get("orga", [None])[0]
-    pin = params.get("orgapin", [None])[0]
-    if val not in ("1","true","True"):
+    val = (_qp_get("orga") or "").strip()
+    pin = (_qp_get("orgapin") or "").strip()
+    if val not in ("1", "true", "True"):
         return False
-    # Accept either secrets OR, if empty, a config-defined orga pin (optional)
+    # Secrets-PIN hat Vorrang; wenn leer, jede nicht-leere Eingabe akzeptieren (optional)
     orga_pin_config = st.secrets.get("orga_pin", "")
     return (pin == orga_pin_config) if orga_pin_config else bool(pin)
 
@@ -313,11 +348,10 @@ else:
 # - Expander: Vollständige Orga-/Jury-Links (nutzt BASE_URL + Pins)
 # --------------------------------------------------------------------
 st.sidebar.header("Setup / Regeln")
-finalists_n = st.sidebar.selectbox("Direkt ins Finale (Top N)", [5,6,7], index=0)
+finalists_n = st.sidebar.selectbox("Direkt ins Finale (Top N)", [5, 6, 7], index=0)
 
-# -------- Full Links in sidebar (with names, not 'j') --------
 with st.sidebar.expander("Links (vollständige URLs)"):
-    # Orga full link (if orga_pin in secrets)
+    # Orga-Link (nur wenn orga_pin in Secrets gesetzt ist)
     orga_pin = st.secrets.get("orga_pin", "")
     if orga_pin:
         st.write("Orga:")
@@ -343,7 +377,7 @@ with tabs[0]:
     st.subheader("Bewertung abgeben")
 
     # --- Kopfzeile: Auswahl Alterskategorie / Crew / Runde ---
-    col0, col1, col2 = st.columns([1,1,1])
+    col0, col1, col2 = st.columns([1, 1, 1])
     with col0:
         # Alterskategorie wählen (Dropdown aus config.json)
         age_group = st.selectbox("Alterskategorie", age_groups, index=0 if age_groups else None, key="age_group_sel")
@@ -422,12 +456,15 @@ with tabs[0]:
             "round": round_choice,
             "age_group": age_group,
             "crew": crew,
-            "judge": locked_judge
+            "judge": locked_judge,
         }
         for c in CATEGORIES:
             row[c] = int(values_int[c])
-        backend.upsert_row(["round","age_group","crew","judge"], row)
-        st.success(f"Bewertung gespeichert: {crew} (Startnr. {cfg.get_start_no(age_group, crew)}), {age_group}, Runde {round_choice}, Juror {locked_judge}.")
+        backend.upsert_row(["round", "age_group", "crew", "judge"], row)
+        st.success(
+            f"Bewertung gespeichert: {crew} (Startnr. {cfg.get_start_no(age_group, crew)}), "
+            f"{age_group}, Runde {round_choice}, Juror {locked_judge}."
+        )
         # Nach Speichern alles zurücksetzen, damit nichts „hängen bleibt“
         reset_vote_state()
 
@@ -437,15 +474,15 @@ with tabs[1]:
     df_all = backend.load()
 
     # Filter: Runde & Alterskategorie
-    colf1, colf2 = st.columns([1,2])
+    colf1, colf2 = st.columns([1, 2])
     with colf1:
-        round_view = st.radio("Runde", ["1","ZW"], horizontal=True, key="round_view")
+        round_view = st.radio("Runde", ["1", "ZW"], horizontal=True, key="round_view")
         age_opts = age_groups
         age_view = st.selectbox("Alterskategorie", age_opts, index=0 if age_opts else None, key="age_view")
 
     # Daten subsetten
     if not df_all.empty and age_view:
-        df_view = df_all[(df_all["round"]==round_view) & (df_all["age_group"]==age_view)].copy()
+        df_view = df_all[(df_all["round"] == round_view) & (df_all["age_group"] == age_view)].copy()
     else:
         df_view = pd.DataFrame()
 
@@ -458,14 +495,15 @@ with tabs[1]:
     st.dataframe(board, use_container_width=True)
 
     # Zusatzausgabe: Finalisten + Zwischenrunde
-    if round_view=="1" and not board.empty:
-        finalists = board.head(finalists_n); rest = board.iloc[finalists_n:]
+    if round_view == "1" and not board.empty:
+        finalists = board.head(finalists_n)
+        rest = board.iloc[finalists_n:]
         st.markdown(f"**Direkt im Finale (Top {finalists_n}) – {age_view}**")
-        st.dataframe(finalists[["Rank","Crew","Total","Judges"]], use_container_width=True)
+        st.dataframe(finalists[["Rank", "Crew", "Total", "Judges"]], use_container_width=True)
         if not rest.empty:
             st.markdown(f"**Zwischenrunde ({age_view})**")
-            st.dataframe(rest[["Rank","Crew","Total","Judges"]], use_container_width=True)
-    if round_view=="ZW" and not board.empty:
+            st.dataframe(rest[["Rank", "Crew", "Total", "Judges"]], use_container_width=True)
+    if round_view == "ZW" and not board.empty:
         winner = board.iloc[0]
         st.markdown(f"🏆 **Sieger Zwischenrunde ({age_view})**: **{winner['Crew']}** (Total {int(winner['Total'])}) → **Finale**")
 
@@ -479,11 +517,11 @@ with tabs[2]:
         # Alterskategorie-Filter (Alle/Kids/Juniors/Adults …)
         age_filter = st.selectbox("Alterskategorie filtern", ["Alle"] + age_groups, index=0, key="raw_age_filter")
         if age_filter != "Alle":
-            df_all = df_all[df_all["age_group"]==age_filter]
+            df_all = df_all[df_all["age_group"] == age_filter]
         # Startnummer ergänzen (für Sortierung)
         df_all["Startnummer"] = df_all.apply(lambda r: cfg.get_start_no(r["age_group"], r["crew"]), axis=1)
         # Sortierfeld wählen: Startnummer / timestamp / TotalWeighted
-        sort_by = st.selectbox("Sortieren nach", ["Startnummer","timestamp","TotalWeighted"], index=0, key="raw_sort_by")
+        sort_by = st.selectbox("Sortieren nach", ["Startnummer", "timestamp", "TotalWeighted"], index=0, key="raw_sort_by")
         ascending = st.checkbox("Aufsteigend sortieren", value=True)
         df_all = df_all.sort_values(by=sort_by, ascending=ascending, kind="mergesort")
 
@@ -499,15 +537,15 @@ with tabs[3]:
     st.subheader("Orga")
 
     # Orga-Schutz: ?orga=1&orgapin=XXXX (XXXX = Secrets orga_pin)
-    def is_orga_mode() -> bool:
-        params = st.query_params
-        val = params.get("orga", [None])[0]
-        pin = params.get("orgapin", [None])[0]
+    def is_orga_mode_local() -> bool:
+        val = (_qp_get("orga") or "").strip()
+        pin = (_qp_get("orgapin") or "").strip()
         orga_pin_secret = st.secrets.get("orga_pin", "")
-        if val not in ("1","true","True"): return False
+        if val not in ("1", "true", "True"):
+            return False
         return (pin == orga_pin_secret) if orga_pin_secret else bool(pin)
 
-    if not is_orga_mode():
+    if not is_orga_mode_local():
         # Hinweistext, wie man den Orga-Modus aktiviert
         st.info("Orga-Modus aktivieren: URL mit `?orga=1&orgapin=XXXX`.")
     else:
@@ -524,9 +562,11 @@ with tabs[3]:
 
         # Juror hinzufügen
         with st.form("add_juror"):
-            colj1, colj2 = st.columns([2,1])
-            with colj1: new_jname = st.text_input("Name")
-            with colj2: new_jpin  = st.text_input("PIN (4-stellig)", max_chars=4)
+            colj1, colj2 = st.columns([2, 1])
+            with colj1:
+                new_jname = st.text_input("Name")
+            with colj2:
+                new_jpin = st.text_input("PIN (4-stellig)", max_chars=4)
             submitted = st.form_submit_button("+ Juror hinzufügen")
             if submitted and new_jname.strip() and new_jpin.strip():
                 new_list = cfg.get_jurors() + [{"name": new_jname.strip(), "pin": new_jpin.strip()}]
@@ -536,9 +576,11 @@ with tabs[3]:
         # Juror umbenennen
         if not jur_df.empty:
             with st.form("rename_juror"):
-                rcol1, rcol2, rcol3 = st.columns([2,2,1])
-                with rcol1: old_j = st.selectbox("Juror auswählen", jur_df["name"].tolist())
-                with rcol2: new_j = st.text_input("Neuer Name")
+                rcol1, rcol2, _ = st.columns([2, 2, 1])
+                with rcol1:
+                    old_j = st.selectbox("Juror auswählen", jur_df["name"].tolist())
+                with rcol2:
+                    new_j = st.text_input("Neuer Name")
                 submitted = st.form_submit_button("Umbenennen")
                 if submitted and old_j and new_j.strip():
                     updated = []
@@ -553,8 +595,9 @@ with tabs[3]:
         # Juror entfernen
         if not jur_df.empty:
             with st.form("remove_juror"):
-                dcol1, dcol2 = st.columns([3,1])
-                with dcol1: del_j = st.selectbox("Juror entfernen", ["—"] + jur_df["name"].tolist())
+                dcol1, _ = st.columns([3, 1])
+                with dcol1:
+                    del_j = st.selectbox("Juror entfernen", ["—"] + jur_df["name"].tolist())
                 submitted = st.form_submit_button("Entfernen")
                 if submitted and del_j != "—":
                     updated = [j for j in cfg.get_jurors() if j["name"] != del_j]
@@ -578,7 +621,10 @@ with tabs[3]:
         ag = st.selectbox("Alterskategorie auswählen", cfg.get_age_groups(), key="orga_ag")
         if ag:
             current = cfg.get_crews(ag)
-            df_crews = pd.DataFrame({"Startnummer":[cfg.get_start_no(ag,c) for c in current], "Crew": current}).sort_values("Startnummer")
+            df_crews = (
+                pd.DataFrame({"Startnummer": [cfg.get_start_no(ag, c) for c in current], "Crew": current})
+                .sort_values("Startnummer")
+            )
             st.dataframe(df_crews, use_container_width=True)
 
             # Crew hinzufügen
@@ -590,9 +636,11 @@ with tabs[3]:
             # Crew umbenennen
             if current:
                 with st.form("rename_crew"):
-                    rc1, rc2 = st.columns([2,2])
-                    with rc1: oldc = st.selectbox("Crew umbenennen", current)
-                    with rc2: newc = st.text_input("Neuer Name")
+                    rc1, rc2 = st.columns([2, 2])
+                    with rc1:
+                        oldc = st.selectbox("Crew umbenennen", current)
+                    with rc2:
+                        newc = st.text_input("Neuer Name")
                     submitted = st.form_submit_button("Umbenennen")
                     if submitted and oldc and newc.strip():
                         cfg.rename_crew(ag, oldc, newc.strip())
@@ -601,8 +649,9 @@ with tabs[3]:
             # Crew entfernen
             if current:
                 with st.form("remove_crew"):
-                    dc1, dc2 = st.columns([3,1])
-                    with dc1: delc = st.selectbox("Crew entfernen", ["—"] + current)
+                    dc1, _ = st.columns([3, 1])
+                    with dc1:
+                        delc = st.selectbox("Crew entfernen", ["—"] + current)
                     submitted = st.form_submit_button("Entfernen")
                     if submitted and delc != "—":
                         cfg.remove_crew(ag, delc)
@@ -614,18 +663,27 @@ with tabs[3]:
         st.markdown("### Orga-Backup-Bewertung (nur Notfall)")
         # Use juror names from config
         juror_names = [j["name"] for j in cfg.get_jurors()]
-        col0, col1, col2 = st.columns([1,1,1])
-        with col0: age_group2 = st.selectbox("Alterskategorie (Orga)", cfg.get_age_groups(), key="age_group_org")
-        with col1: round_choice2 = st.radio("Runde (Orga)", ["1","ZW"], horizontal=True, key="round_org")
-        with col2: judge2 = st.selectbox("Juror (Orga)", juror_names, key="judge_org")
+        col0, col1, col2 = st.columns([1, 1, 1])
+        with col0:
+            age_group2 = st.selectbox("Alterskategorie (Orga)", cfg.get_age_groups(), key="age_group_org")
+        with col1:
+            round_choice2 = st.radio("Runde (Orga)", ["1", "ZW"], horizontal=True, key="round_org")
+        with col2:
+            judge2 = st.selectbox("Juror (Orga)", juror_names, key="judge_org")
         crew2 = st.text_input("Crew (Orga – manuell oder aus Liste)")
         nums2 = {}
         for c in CATEGORIES:
-            nums2[c] = st.selectbox(f"{c} (Orga)", ['—'] + [str(i) for i in range(1,11)], key=f"org_{c}")
-        all_set_org = crew2.strip() and age_group2 and all(v!='—' for v in nums2.values())
+            nums2[c] = st.selectbox(f"{c} (Orga)", ["—"] + [str(i) for i in range(1, 11)], key=f"org_{c}")
+        all_set_org = crew2.strip() and age_group2 and all(v != "—" for v in nums2.values())
         if st.button("Orga-Bewertung speichern", disabled=not all_set_org):
-            row = {"timestamp": dt.datetime.now().isoformat(timespec="seconds"),
-                   "round": round_choice2, "age_group": age_group2, "crew": crew2.strip(), "judge": judge2}
-            for c in CATEGORIES: row[c] = int(nums2[c])
-            backend.upsert_row(["round","age_group","crew","judge"], row)
+            row = {
+                "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
+                "round": round_choice2,
+                "age_group": age_group2,
+                "crew": crew2.strip(),
+                "judge": judge2,
+            }
+            for c in CATEGORIES:
+                row[c] = int(nums2[c])
+            backend.upsert_row(["round", "age_group", "crew", "judge"], row)
             st.success("Orga-Bewertung gespeichert.")
