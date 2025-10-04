@@ -564,6 +564,17 @@ with tab_bewerten:
             )
             reset_vote_state()
 
+    st.success(
+        f"Bewertung gespeichert: {crew} (Startnr. {cfg.get_start_no(age_group, crew)}), "
+        f"{age_group}, Runde {round_choice}, Juror {row['judge']}."
+    )
+    reset_vote_state()
+
+    # 🔄 Nach erfolgreichem Speichern Seite automatisch neu laden,
+    # damit Crew sofort aus Dropdown verschwindet (PIN bleibt erhalten)
+    st.rerun()
+
+
 # ---------- TAB: LEADERBOARD (nur Orga) ----------
 if orga_mode:
     with tab_leaderboard:
