@@ -542,7 +542,7 @@ with tabs[2]:
             for c in editable_cols:
                 disabled_map[c] = st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1)
 
-            grid = st.data_editor(
+                        grid = st.data_editor(
                 tmp,
                 use_container_width=True,
                 hide_index=True,
@@ -550,16 +550,25 @@ with tabs[2]:
                 disabled=not edit_mode,  # Ganzer Grid schreibbar/gesperrt
                 key="orga_editor",
             )
-            # Schicke Ansicht mit grauen Separator-Zeilen (schreibgeschützt)
-styled = grid_preview.copy()
-def highlight_sep(row):
-    if row.get("_sep", False):
-        return ["background-color: #e0e0e0"] * len(row)
-    else:
-        return [""] * len(row)
 
-st.markdown("**Ansicht mit Hervorhebung:**")
-st.dataframe(styled.style.apply(highlight_sep, axis=1), use_container_width=True)
+            # Live-Total nach Edits neu berechnen
+            grid_preview = grid.copy()
+            mask_real = ~grid_preview["_sep"].fillna(False)
+            grid_preview.loc[mask_real, "TotalWeighted"] = grid_preview[mask_real].apply(
+                lambda r: _compute_weighted_local(r), axis=1
+            )
+
+            # Schicke Ansicht mit grauen Separator-Zeilen (schreibgeschützt)
+            styled = grid_preview.copy()
+            def highlight_sep(row):
+                if row.get("_sep", False):
+                    return ["background-color: #e0e0e0"] * len(row)
+                else:
+                    return [""] * len(row)
+
+            st.markdown("**Ansicht mit Hervorhebung:**")
+            st.dataframe(styled.style.apply(highlight_sep, axis=1), use_container_width=True)
+
 
             # Live-Total nach Edits neu berechnen und (optional) separat zeigen
             grid_preview = grid.copy()
