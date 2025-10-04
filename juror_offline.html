@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JDC – Offline Formular</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px}label{display:block;margin-top:10px}input,select,button{font-size:16px;padding:6px 8px;margin-top:4px}.row{margin-bottom:8px}.small{font-size:12px;color:#555}.ok{color:green}.err{color:#b00020}.box{border:1px solid #ddd;padding:12px;border-radius:8px;margin:12px 0}</style>
+</head><body>
+<h1>JDC – Offline Bewertung</h1>
+<p>Funktioniert <b>ohne Internet</b>. Speichert lokal im Browser. Später CSV exportieren und in der Online-App importieren.</p>
+<div class="box">
+<label>Alterskategorie</label><input id="age_group" placeholder="Kids / Juniors / Adults">
+<label>Crew</label><input id="crew" placeholder="Crew Name">
+<label>Runde</label><select id="round"><option value="1">1</option><option value="ZW">ZW</option></select>
+<label>Juror</label><input id="judge" placeholder="z. B. J1"></div>
+<div class="box">
+<div class="row"><label>Synchronität</label><input id="c1" type="number" min="1" max="10" value="7"></div>
+<div class="row"><label>Schwierigkeit der Choreographie</label><input id="c2" type="number" min="1" max="10" value="7"></div>
+<div class="row"><label>Choreographie</label><input id="c3" type="number" min="1" max="10" value="7"></div>
+<div class="row"><label>Bilder und Linien</label><input id="c4" type="number" min="1" max="10" value="7"></div>
+<div class="row"><label>Ausdruck und Bühnenpräsenz</label><input id="c5" type="number" min="1" max="10" value="7"></div>
+</div>
+<button id="save">Bewertung lokal speichern</button> <span id="msg" class="small"></span>
+<div class="box"><p><b>Export:</b> Offline-Bewertungen als CSV exportieren und in der Online-App im Tab „Daten & Export → Offline-Import“ hochladen.</p>
+<button id="export">CSV exportieren</button></div>
+<script>
+const KEY="jdc_offline_queue_v1";
+const headers=["timestamp","round","age_group","crew","judge","Synchronität","Schwierigkeit der Choreographie","Choreographie","Bilder und Linien","Ausdruck und Bühnenpräsenz"];
+function loadQ(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return []}}
+function saveQ(a){localStorage.setItem(KEY,JSON.stringify(a))}
+function nowISO(){return new Date().toISOString().slice(0,19)}
+document.getElementById("save").addEventListener("click",()=>{
+ const r={timestamp:nowISO(),round:document.getElementById("round").value,age_group:document.getElementById("age_group").value.trim(),crew:document.getElementById("crew").value.trim(),judge:document.getElementById("judge").value.trim(),"Synchronität":parseInt(document.getElementById("c1").value,10)||0,"Schwierigkeit der Choreographie":parseInt(document.getElementById("c2").value,10)||0,"Choreographie":parseInt(document.getElementById("c3").value,10)||0,"Bilder und Linien":parseInt(document.getElementById("c4").value,10)||0,"Ausdruck und Bühnenpräsenz":parseInt(document.getElementById("c5").value,10)||0};
+ if(!r.age_group||!r.crew||!r.judge){const m=document.getElementById("msg");m.textContent="Bitte Alterskategorie, Crew und Juror ausfüllen.";m.className="small err";return}
+ const q=loadQ();q.push(r);saveQ(q);const m=document.getElementById("msg");m.textContent="Gespeichert. ("+q.length+" Einträge offline)";m.className="small ok"});
+document.getElementById("export").addEventListener("click",()=>{
+ const q=loadQ();if(!q.length){alert("Keine offline gespeicherten Bewertungen.");return}
+ const rows=[headers.join(",")].concat(q.map(r=>headers.map(h=>(""+(r[h]??"")).replace(/"/g,'""')).join(",")));
+ const blob=new Blob([rows.join("\n")],{type:"text/csv;charset=utf-8;"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="offline_votes.csv";a.click();URL.revokeObjectURL(url)});
+</script>
+</body></html>

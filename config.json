@@ -1,0 +1,65 @@
+{
+  "age_groups": [
+    "Kids",
+    "Juniors",
+    "Adults"
+  ],
+  "crews_by_age": {
+    "Kids": [
+      "Shiny Steps",
+      "S.O. (Smooth Operators)",
+      "Littlemoves",
+      "DC Funky Steps",
+      "Lil Steps",
+      "Shimmer Squad",
+      "Lenz Dance Kids",
+      "Lil People",
+      "Wild Socks"
+    ],
+    "Juniors": [
+      "Sparky Feet",
+      "Bovenga Kids",
+      "New Generation",
+      "B-Nation",
+      "Selected",
+      "Lenz Dance",
+      "B.D.C.",
+      "No Scrubs",
+      "PUZZLE",
+      "Make 'em rock",
+      "Demolitioners",
+      "Make 'em groove",
+      "Minisquad Berlin",
+      "UNITED",
+      "The Phantoms",
+      "Yunity",
+      "Street Girls",
+      "Phoenix",
+      "Epic"
+    ],
+    "Adults": [
+      "TNG Dancecrew",
+      "Funky Diamonds",
+      "FDFam",
+      "WeR1",
+      "the FAMEous Squad",
+      "The Final Step",
+      "Suncity",
+      "Blank Canvas",
+      "Eight-o-Eight",
+      "ECLIPSE",
+      "RADAR",
+      "Team if you know you know",
+      "RDC - Reloaded Deluxe Crew",
+      "Impact",
+      "Make 'em stare",
+      "Persisting",
+      "I.D. Crew Berlin",
+      "Make 'em proud",
+      "RESIST",
+      "Primetime",
+      "UNCUT",
+      "TEAM SELECTED"
+    ]
+  }
+}
