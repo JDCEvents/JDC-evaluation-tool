@@ -660,6 +660,7 @@ with tabs[2]:
                 "_sep": st.column_config.CheckboxColumn("_sep", disabled=True),
                 **{c: st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1) for c in editable_cols},
             }
+            
 
             grid = st.data_editor(
                 tmp,
@@ -668,6 +669,7 @@ with tabs[2]:
                 column_config=column_cfg,
                 disabled=not edit_mode,
                 key="orga_editor",
+                row_styler=_highlight_sep,  # <<< NEU: Separatoren im Editor einfärben
             )
 
             # Live-Total nach Edits neu berechnen
