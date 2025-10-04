@@ -922,7 +922,7 @@ with tabs[3]:
                     st.session_state["wipe_confirm_step"] = 0
                     st.rerun()
 
-       elif step == 3:
+      elif step == 3:
     st.error("🚨 **LETZTE WARNUNG!** JETZT werden wirklich ALLE Daten gelöscht.")
 
     # 1) Backup-Export anbieten (aktuelle CSV sichern)
