@@ -777,7 +777,7 @@ with tab_bewertungen:
                 key="dl_filtered_csv",
             )
 
-    # ======= JURY-VARIANTE =======
+        # ======= JURY-VARIANTE =======
     else:
         judge_name = st.session_state.get("judge_authed_name")
         if not judge_name:
@@ -812,6 +812,17 @@ with tab_bewertungen:
                         by=["Startnummer", "crew", "timestamp"], ascending=True, kind="mergesort"
                     ).reset_index(drop=True)
 
+                    # --- Gewichtete Gesamtsumme pro Zeile neu berechnen ---
+                    for c in CATEGORIES:
+                        if c not in df_judge.columns:
+                            df_judge[c] = 0
+                        df_judge[c] = pd.to_numeric(df_judge[c], errors="coerce").fillna(0).astype(int)
+
+                    df_judge["Gesamtpunktzahl"] = df_judge.apply(
+                        lambda r: sum(r[c] * (2 if c in DOUBLE_CATS else 1) for c in CATEGORIES),
+                        axis=1
+                    )
+
                     # Nur relevante Spalten anzeigen (keine Separatoren, keine Editierung)
                     nice_order = ["Startnummer", "age_group", "round", "crew", "timestamp", *CATEGORIES, "Gesamtpunktzahl"]
                     df_judge = df_judge[[c for c in nice_order if c in df_judge.columns]]
@@ -829,7 +840,8 @@ with tab_bewertungen:
                 else:
                     st.info("Keine Bewertungen für die gewählten Filter vorhanden.")
 
-# ---------- TAB: ORGANISATION (nur Orga) ----------
+
+# ---------- TAB 3: ORGANISATION (nur Orga) ----------
 if orga_mode:
     with tab_orga:
         st.subheader("Organisation")
