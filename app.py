@@ -810,7 +810,96 @@ with tab_bewertungen:
                 mime="text/csv",
                 key="dl_filtered_csv",
             )
+            # --------------------------------------------------------------------
+            # 🗑️ Bewertung löschen (nur Orga)
+            # --------------------------------------------------------------------
+            st.markdown("---")
+            st.markdown("### 🗑️ Bewertung löschen (Orga)")
 
+            # 1. Aktuelle CSV laden
+            df_current = backend.load().copy()
+            if df_current.empty:
+                st.info("Keine Bewertungen vorhanden.")
+            else:
+                # 2. Auswahlmöglichkeiten aus vorhandenen Daten ableiten
+                # (so dass man nur echte Werte auswählen kann)
+                ag_opts = sorted([
+                    a for a in df_current["age_group"].dropna().astype(str).unique().tolist() if a
+                ])
+                colA1, colA2 = st.columns([1, 1])
+                with colA1:
+                    ag_sel = st.selectbox("Alterskategorie wählen", ag_opts, key="del_ag_sel")
+                with colA2:
+                    round_opts = ["1", "ZW"]
+                    round_sel = st.selectbox("Runde wählen", round_opts, key="del_round_sel")
+
+                # Filter auf die gewählte Alterskategorie und Runde
+                df_scoped = df_current[
+                    (df_current["age_group"].astype(str) == str(ag_sel))
+                    & (df_current["round"].astype(str) == str(round_sel))
+                ]
+
+                # 3. Nur Juroren anbieten, die in diesem Filter Werte haben
+                judge_opts = sorted(df_scoped["judge"].dropna().astype(str).unique().tolist())
+                colB1, colB2 = st.columns([1, 1])
+                with colB1:
+                    judge_sel = st.selectbox(
+                        "Juror wählen",
+                        judge_opts if judge_opts else ["—"],
+                        key="del_judge_sel"
+                    )
+
+                # 4. Nur Crews anbieten, die dieser Juror bewertet hat
+                with colB2:
+                    crew_opts = sorted(
+                        df_scoped[df_scoped["judge"].astype(str) == str(judge_sel)]["crew"]
+                        .dropna().astype(str).unique().tolist()
+                    )
+                    crew_sel = st.selectbox(
+                        "Crew wählen",
+                        crew_opts if crew_opts else ["—"],
+                        key="del_crew_sel"
+                    )
+
+                # 5. Vorschau der betroffenen Bewertung (falls vorhanden)
+                df_preview = df_scoped[
+                    (df_scoped["judge"].astype(str) == str(judge_sel))
+                    & (df_scoped["crew"].astype(str) == str(crew_sel))
+                ].copy()
+
+                if df_preview.empty:
+                    st.info("Für diese Auswahl gibt es aktuell keine gespeicherte Bewertung.")
+                else:
+                    # Übersicht: nur die wichtigsten Spalten zeigen
+                    show_cols = [
+                        "timestamp", "age_group", "round", "crew", "judge",
+                        *[c for c in CATEGORIES if c in df_preview.columns]
+                    ]
+                    if "Gesamtpunktzahl" in df_preview.columns:
+                        show_cols.append("Gesamtpunktzahl")
+                    st.dataframe(df_preview[show_cols], use_container_width=True)
+
+                    # Hinweis & Löschbutton
+                    st.warning(
+                        "Das Löschen entfernt die Bewertung dauerhaft aus der CSV. "
+                        "Danach erscheint diese Crew bei dem ausgewählten Juror "
+                        "wieder im Auswahl-Dropdown."
+                    )
+
+                    colC1, colC2 = st.columns([1, 3])
+                    with colC1:
+                        if st.button("Bewertung löschen", type="primary", key="btn_delete_score"):
+                            deleted = backend.delete_row_by_keys(
+                                round_sel, ag_sel, crew_sel, judge_sel
+                            )
+                            if deleted:
+                                st.success("Bewertung gelöscht.")
+                                st.rerun()
+                            else:
+                                st.error(
+                                    "Keine passende Bewertung gefunden – vielleicht schon gelöscht?"
+                                )
+    
         # ======= JURY-VARIANTE =======
     else:
         judge_name = st.session_state.get("judge_authed_name")
