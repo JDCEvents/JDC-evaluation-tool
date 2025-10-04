@@ -462,14 +462,15 @@ with tabs[2]:
         return int(total)
 
     def _with_separators(df: pd.DataFrame, group_col="crew") -> pd.DataFrame:
-        """Fügt nach jeder Gruppe (Crew) eine Leerzeile als Separator ein.
+        """Fügt nach jeder Gruppe (Crew) eine schamle Separatorzeile ein.
         Diese Dummy-Zeilen haben _sep=True und werden nie gespeichert."""
         if df.empty:
             return df
         blocks = []
         for _, g in df.groupby(group_col, sort=False):
             blocks.append(g)
-            sep = {c: None for c in g.columns}
+                    # Dummy-Zeile: nur Crew leer, Rest mit Leerzeichen -> wirkt schmaler
+            sep = {c: "" for c in g.columns}
             sep[group_col] = ""   # optische Lücke
             sep["_sep"] = True
             blocks.append(pd.DataFrame([sep]))
@@ -559,7 +560,7 @@ with tabs[2]:
 
             def _highlight_sep(row):
                 if row.get("_sep", False):
-                    return ["background-color: #e9e9e9"] * len(row)  # hellgrau
+                    return ["background-color: #2b2b2b"] * len(row)  # Dunkles Grau
                 return [""] * len(row)
 
             st.markdown("**Ansicht mit Hervorhebung:**")
