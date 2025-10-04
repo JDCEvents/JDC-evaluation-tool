@@ -436,169 +436,169 @@ with tabs[1]:
         winner = board.iloc[0]
         st.markdown(f"🏆 **Sieger Zwischenrunde ({age_view})**: **{winner['Crew']}** (Total {int(winner['Total'])}) → **Finale**")
 
-# ---------- TAB 2: DATEN & EXPORT (Rohdaten + Filter/Sort + Orga-Edit) ----------
+# ---------- TAB 2: DATEN & EXPORT (gruppiert, Lücken, Orga-Edit + Auto-Total) ----------
 with tabs[2]:
     st.subheader("Daten & Export")
 
     df_all = backend.load()
 
-    # Kleine Helper nur für diesen Tab
+    # --- kleine Helper ---
     def _start_no_safe(age, crew):
         try:
             return cfg.get_start_no(age, crew)
         except Exception:
             return None
 
+    def _compute_weighted_local(row: Dict) -> int:
+        # gleiche Logik wie im Backend (für Live-Vorschau)
+        total = 0
+        for c in CATEGORIES:
+            v = row.get(c, 0)
+            try:
+                v = int(v)
+            except Exception:
+                v = 0
+            total += v * (2 if c in DOUBLE_CATS else 1)
+        return int(total)
+
     def _with_separators(df: pd.DataFrame, group_col="crew") -> pd.DataFrame:
         """Fügt nach jeder Gruppe (Crew) eine Leerzeile als Separator ein.
         Diese Dummy-Zeilen haben _sep=True und werden nie gespeichert."""
         if df.empty:
             return df
-        out = []
+        blocks = []
         for _, g in df.groupby(group_col, sort=False):
-            out.append(g)
-            # Dummy/Gap-Zeile
+            blocks.append(g)
             sep = {c: None for c in g.columns}
-            sep[group_col] = ""     # leere Crew zeigt optische Lücke
+            sep[group_col] = ""   # optische Lücke
             sep["_sep"] = True
-            out.append(pd.DataFrame([sep]))
-        return pd.concat(out, ignore_index=True)
+            blocks.append(pd.DataFrame([sep]))
+        return pd.concat(blocks, ignore_index=True)
 
-    def _is_valid_score(x):
-        try:
-            v = int(x)
-            return 1 <= v <= 10
-        except Exception:
-            return False
-
-    # Filter & Basis-View
     if df_all.empty:
         st.info("Noch keine Daten vorhanden.")
-        st.download_button("Leere CSV herunterladen", data=df_all.to_csv(index=False).encode("utf-8"),
-                           file_name="scores_export.csv", mime="text/csv")
+        st.download_button(
+            "Leere CSV herunterladen",
+            data=df_all.to_csv(index=False).encode("utf-8"),
+            file_name="scores_export.csv",
+            mime="text/csv",
+        )
     else:
-        # Orga-Optionen: Runde + Alterskategorie
-        # (Für nicht-Orga bleibt es bei der bisherigen, einfachen Ansicht)
         if orga_mode:
+            # ---- Orga-Ansicht mit Editiermodus ----
             colA, colB, colC = st.columns([1, 1, 1])
             with colA:
                 age_filter = st.selectbox("Alterskategorie", ["Alle"] + age_groups, index=0, key="raw_age_filter")
             with colB:
                 round_filter = st.selectbox("Runde", ["Alle", "1", "ZW"], index=0, key="raw_round_filter")
             with colC:
-                edit_mode = st.toggle("Bearbeiten (Kategorien) aktivieren", value=False, help="Nur im Orga-Modus")
+                edit_mode = st.toggle("Bearbeiten aktivieren (1–10)", value=False)
 
-            # Filter anwenden
             df_view = df_all.copy()
             if age_filter != "Alle":
                 df_view = df_view[df_view["age_group"] == age_filter]
             if round_filter != "Alle":
                 df_view = df_view[df_view["round"] == round_filter]
 
-            # Startnummer ergänzen + Standardsortierung (Startnr → Crew → Judge)
+            # Sortierung & Startnummer
             df_view["Startnummer"] = df_view.apply(lambda r: _start_no_safe(r["age_group"], r["crew"]), axis=1)
             df_view = df_view.sort_values(
-                by=["Startnummer", "crew", "judge", "timestamp"], ascending=[True, True, True, True], kind="mergesort"
-            )
+                by=["Startnummer", "crew", "judge", "timestamp"],
+                ascending=True,
+                kind="mergesort",
+            ).reset_index(drop=True)
 
-            # Spalten-Reihenfolge nett anordnen
+            # Spaltenreihenfolge
             nice_order = ["Startnummer", "age_group", "round", "crew", "judge", "timestamp", *CATEGORIES, "TotalWeighted"]
-            cols_existing = [c for c in nice_order if c in df_view.columns]
-            df_view = df_view[cols_existing].reset_index(drop=True)
+            df_view = df_view[[c for c in nice_order if c in df_view.columns]]
 
-            # Separator-Zeilen zwischen Crews einziehen (nur Anzeige)
+            # Separatorzeilen für optische Gruppenabstände
             df_view["_sep"] = False
             df_sep = _with_separators(df_view, group_col="crew")
 
-            st.markdown("**Rohdaten (gruppiert nach Crew, mit Lücken für schnelle Sichtprüfung):**")
+            # Live neu berechnete TotalWeighted (für Anzeige: auch nach Edits)
+            # Hinweis: Data Editor gibt uns 'grid' zurück (ggf. editiert) – darauf rechnen wir gleich erneut.
+            # Für die Erstanzeige rechnen wir schon einmal:
+            tmp = df_sep.copy()
+            tmp["TotalWeighted"] = tmp.apply(
+                lambda r: _compute_weighted_local(r) if not r.get("_sep", False) else None, axis=1
+            )
 
-            # Bearbeitbare Ansicht (nur Kategorien editierbar)
-            editable_cols = [c for c in CATEGORIES if c in df_sep.columns]
-            disabled_cols = [c for c in df_sep.columns if c not in editable_cols]
+            st.markdown("**Rohdaten (gruppiert nach Crew, mit Leerzeilen für Schnellcheck):**")
 
-            # Dummy/Separator-Zeilen NICHT editierbar machen, indem wir Kategorien dort None lassen
-            # und später beim Speichern alle Zeilen mit _sep==True ignorieren.
+            # Nur Kategorien editierbar; Separator-Zeilen bleiben deaktiviert
+            editable_cols = [c for c in CATEGORIES if c in tmp.columns]
+            disabled_map = {
+                "Startnummer": st.column_config.NumberColumn("Startnummer", disabled=True),
+                "age_group": st.column_config.TextColumn("Alterskategorie", disabled=True),
+                "round": st.column_config.TextColumn("Runde", disabled=True),
+                "crew": st.column_config.TextColumn("Crew", disabled=True),
+                "judge": st.column_config.TextColumn("Juror", disabled=True),
+                "timestamp": st.column_config.TextColumn("Zeitstempel", disabled=True),
+                "_sep": st.column_config.CheckboxColumn("_sep", disabled=True, help="Interne Markierung"),
+                # TotalWeighted zeigen wir schreibgeschützt an (berechnen wir live)
+                "TotalWeighted": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
+            }
+            for c in editable_cols:
+                disabled_map[c] = st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1)
+
             grid = st.data_editor(
-                df_sep,
+                tmp,
                 use_container_width=True,
                 hide_index=True,
-                column_config={
-                    "Startnummer": st.column_config.NumberColumn("Startnummer", disabled=True),
-                    "age_group": st.column_config.TextColumn("Alterskategorie", disabled=True),
-                    "round": st.column_config.TextColumn("Runde", disabled=True),
-                    "crew": st.column_config.TextColumn("Crew", disabled=True),
-                    "judge": st.column_config.TextColumn("Juror", disabled=True),
-                    "timestamp": st.column_config.TextColumn("Zeitstempel", disabled=True),
-                    "TotalWeighted": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
-                    "_sep": st.column_config.CheckboxColumn("_sep", disabled=True, help="Interne Markierung"),
-                    **{c: st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1)
-                       for c in editable_cols},
-                },
-                disabled=[c for c in disabled_cols if c != "_sep"],  # nur Kategorien offen
+                column_config=disabled_map,
+                disabled=not edit_mode,  # Ganzer Grid schreibbar/gesperrt
                 key="orga_editor",
             )
 
-            # Speichern-Button nur anzeigen, wenn Edit-Mode aktiv
-            # (der Button ist trotzdem aktiv nur, wenn Änderungen vorhanden/valide sind)
+            # Live-Total nach Edits neu berechnen und (optional) separat zeigen
+            grid_preview = grid.copy()
+            # Separatoren ignorieren
+            mask_real = ~grid_preview["_sep"].fillna(False)
+            grid_preview.loc[mask_real, "TotalWeighted"] = grid_preview[mask_real].apply(
+                lambda r: _compute_weighted_local(r), axis=1
+            )
+
+            # Speichern nur im Edit-Mode anzeigen
             if edit_mode:
-                # Validierung: jede geänderte Kategorie muss 1..10 sein (Separator-Zeilen ignorieren)
-                edited_df = grid.copy()
-                # Entferne Separatoren
-                edited_df = edited_df[~edited_df["_sep"].fillna(False)].copy()
+                # Validierung: Kategorien aller realen Zeilen müssen 1–10 sein
+                def _valid_row(rr):
+                    for c in CATEGORIES:
+                        try:
+                            v = int(rr[c])
+                            if not (1 <= v <= 10):
+                                return False
+                        except Exception:
+                            return False
+                    return True
 
-                invalid_mask = pd.Series(False, index=edited_df.index)
-                for c in CATEGORIES:
-                    if c in edited_df.columns:
-                        invalid_mask |= ~edited_df[c].apply(_is_valid_score)
-                invalid_rows = edited_df[invalid_mask]
+                invalid_mask = mask_real & (~grid_preview.apply(_valid_row, axis=1))
+                invalid_count = int(invalid_mask.sum())
 
-                col_save, _ = st.columns([1, 5])
+                col_save, col_info = st.columns([1, 5])
                 with col_save:
-                    save_disabled = len(invalid_rows) > 0
+                    save_disabled = invalid_count > 0
                     if st.button("Änderungen speichern", type="primary", disabled=save_disabled):
-                        # Änderungen zurückschreiben: wir nutzen den Upsert-Key ("round","age_group","crew","judge")
-                        # und lassen timestamp unverändert (nur Info).
+                        # Nur echte Zeilen, Separatoren raus
+                        edited_df = grid_preview[mask_real].copy()
+                        # Zurückschreiben mit Upsert-Key; Backend berechnet TotalWeighted final neu
                         updates = 0
                         for _, r in edited_df.iterrows():
-                            try:
-                                row = {
-                                    "timestamp": r.get("timestamp"),
-                                    "round": r.get("round"),
-                                    "age_group": r.get("age_group"),
-                                    "crew": r.get("crew"),
-                                    "judge": r.get("judge"),
-                                }
-                                # Kategorien übernehmen
-                                for c in CATEGORIES:
-                                    if c in edited_df.columns:
-                                        row[c] = int(r[c])
-                                backend.upsert_row(["round", "age_group", "crew", "judge"], row)
-                                updates += 1
-                            except Exception:
-                                pass
+                            row = {
+                                "timestamp": r.get("timestamp"),
+                                "round": r.get("round"),
+                                "age_group": r.get("age_group"),
+                                "crew": r.get("crew"),
+                                "judge": r.get("judge"),
+                            }
+                            for c in CATEGORIES:
+                                row[c] = int(r[c])
+                            backend.upsert_row(["round", "age_group", "crew", "judge"], row)
+                            updates += 1
                         st.success(f"Änderungen gespeichert ({updates} Zeilen aktualisiert).")
                         st.rerun()
-
-                if save_disabled:
-                    st.warning("Bitte alle geänderten Kategorienwerte als **1–10** eintragen (keine leeren/ungültigen).")
-
-            # Export (gefilterte + sortierte Rohdaten, ohne Separatoren)
-            export_df = df_view.copy()
-            csv_bytes = export_df.to_csv(index=False).encode("utf-8")
-            st.download_button("CSV herunterladen (gefiltert, ohne Separatoren)",
-                               data=csv_bytes, file_name="scores_export.csv", mime="text/csv")
-
-        else:
-            # Nicht-Orga: einfache, bisherige Ansicht (lesend)
-            age_filter = st.selectbox("Alterskategorie filtern", ["Alle"] + age_groups, index=0, key="raw_age_filter_public")
-            df_pub = df_all.copy()
-            if age_filter != "Alle":
-                df_pub = df_pub[df_pub["age_group"] == age_filter]
-            df_pub["Startnummer"] = df_pub.apply(lambda r: _start_no_safe(r["age_group"], r["crew"]), axis=1)
-            df_pub = df_pub.sort_values(by=["Startnummer", "crew", "judge", "timestamp"], ascending=True, kind="mergesort")
-            st.dataframe(df_pub, use_container_width=True)
-            st.download_button("CSV herunterladen", data=df_pub.to_csv(index=False).encode("utf-8"),
-                               file_name="scores_export.csv", mime="text/csv")
+                if invalid_count > 0:
+                    st.warning("
 
 
 # ---------- TAB 3: ORGA ----------
