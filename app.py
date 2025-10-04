@@ -645,7 +645,7 @@ with tabs[2]:
 
         # -------- Orga: Editor + Vorschau + Speichern --------
         if orga_mode:
-            edit_mode = st.toggle("Bearbeiten aktivieren (nur Kategorien 1–10)", value=False)
+            edit_mode = st.toggle("Bearbeiten aktivieren (nur Kategorien 1–10)", value=True)
 
             # Editor (nur Kategorien editierbar)
             editable_cols = [c for c in CATEGORIES if c in tmp.columns]
