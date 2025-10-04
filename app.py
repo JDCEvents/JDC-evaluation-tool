@@ -343,8 +343,13 @@ def reset_vote_state():
 # --------------------------------------------------------------------
 # Seite konfigurieren
 # --------------------------------------------------------------------
-st.set_page_config(page_title="JDC Scoring 2026", page_icon="🧮", layout="wide")
-st.title("🧮 JDC Scoring 2026")
+st.set_page_config(page_title="JDC Scoring 2026", page_icon="logo.png", layout="wide")
+col_logo, col_title = st.columns([0.15, 0.85])
+with col_logo:
+    st.image("logo.png", use_container_width=True)
+with col_title:
+    st.title("JDC Scoring 2026")
+
 
 orga_mode = is_orga_mode()
 locked_judge = None if orga_mode else judge_login()  # Juror:innen: Login-Flow
