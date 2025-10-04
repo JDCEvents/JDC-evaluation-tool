@@ -188,6 +188,8 @@ class CSVBackend:
         return int(sum((row.get(c, 0) or 0) * (2 if c in DOUBLE_CATS else 1) for c in CATEGORIES))
 
     def upsert_row(self, key_cols: List[str], row: Dict):
+        """Wird beim normalen Speichern (Jury & Orga-Notfall) benutzt:
+        aktualisiert nach Key-Kombination oder legt neuen Datensatz an."""
         row = dict(row)
         row["TotalWeighted"] = self._compute_weighted(row)
         df = self.load()
@@ -207,9 +209,8 @@ class CSVBackend:
 
     def update_scores_by_timestamp_and_judge(self, ts: str, judge: str, new_scores: Dict):
         """
-        Überschreibt NUR die Kategorien (1–10) und TotalWeighted
-        der Zeile mit (timestamp==ts AND judge==judge).
-        Legt KEINE neue Zeile an.
+        ORGA-Korrektur: überschreibt NUR die Kategorien (1–10) und TotalWeighted
+        der Zeile mit (timestamp==ts AND judge==judge). Legt KEINE neue Zeile an.
         """
         df = self.load()
         if df.empty:
@@ -243,8 +244,8 @@ class CSVBackend:
 
         df.to_csv(self.path, index=False)
 
-
 backend = CSVBackend("data.csv")
+
 
 # --------------------------------------------------------------------
 # Leaderboard
@@ -674,7 +675,7 @@ with tabs[2]:
                     st.success("Konsistenz-Fix gespeichert.")
                     st.rerun()
 
-            # Speichern der Kategorie-Edits
+            # Speichern der Kategorie-Edits (überschreibt bestehende Zeile per timestamp+judge)
             if edit_mode:
                 def _valid_row(rr):
                     for c in CATEGORIES:
@@ -696,16 +697,11 @@ with tabs[2]:
                         edited_df = grid_preview[mask_real].copy()
                         updates = 0
                         for _, r in edited_df.iterrows():
-                            row = {
-                                "timestamp": r.get("timestamp"),
-                                "round": r.get("round"),
-                                "age_group": r.get("age_group"),
-                                "crew": r.get("crew"),
-                                "judge": r.get("judge"),
-                            }
-                            for c in CATEGORIES:
-                                row[c] = int(r[c])
-                            backend.upsert_row(["round", "age_group", "crew", "judge"], row)
+                            backend.update_scores_by_timestamp_and_judge(
+                                ts=str(r.get("timestamp")),
+                                judge=str(r.get("judge")),
+                                new_scores={c: int(r[c]) for c in CATEGORIES}
+                            )
                             updates += 1
                         st.success(f"Änderungen gespeichert ({updates} Zeilen aktualisiert).")
                         st.rerun()
