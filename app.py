@@ -1,4 +1,4 @@
-# app.py (JDC evaluation tool v3)
+# app.py (JDC evaluation tool v3, Keyboard-Input Edition)
 # --------------------------------------------------------------------
 # WOFÜR IST DIESE DATEI?
 # - Dies ist die HAUPTDATEI deiner Streamlit-App.
@@ -281,14 +281,13 @@ def is_orga_mode() -> bool:
 
 # --------------------------------------------------------------------
 # UI-HILFE
-# - reset_vote_state (): Setzt alle Kategorie-Felder auf leer (""), damit man per Tab durchspringen kann
+# - reset_vote_state: Setzt alle Kategorien auf leer "" (statt '—').
 #   → Wird beim Crew-Wechsel genutzt, damit nichts „hängen bleibt“.
 # --------------------------------------------------------------------
 def reset_vote_state():
     # Setzt alle Kategorie-Felder auf leer (""), damit man per Tab durchspringen kann
     for c in CATEGORIES:
         st.session_state[f"cat_{c}"] = ""
-
 
 # --------------------------------------------------------------------
 # SEITENKONFIG & HEADER
@@ -363,61 +362,68 @@ with tabs[0]:
         reset_vote_state()
         st.session_state["last_crew"] = crew
 
- # --- Kategorien-Eingabe (nur Tastatur, leere Felder erlaubt) ---
-st.markdown("### Kategorien (bitte jede Kategorie als Zahl 1–10 eingeben)")
-values_raw = {}
-values_int = {}
-invalid_fields = []
+    # --- Kategorien-Eingabe (nur Tastatur, leere Felder erlaubt) ---
+    # - Textfelder, damit per Tastatur + Tab schnell eingegeben werden kann
+    # - Leere Felder initial; Speichern erst, wenn alle 1–10 sind
+    st.markdown("### Kategorien (bitte jede Kategorie als Zahl 1–10 eingeben)")
+    values_raw = {}
+    values_int = {}
+    invalid_fields = []
 
-def _parse_score(s: str):
-    s = (s or "").strip()
-    if not s:
-        return None
-    if not s.isdigit():
-        return None
-    v = int(s)
-    return v if 1 <= v <= 10 else None
+    def _parse_score(s: str):
+        s = (s or "").strip()
+        if not s:
+            return None
+        if not s.isdigit():
+            return None
+        v = int(s)
+        return v if 1 <= v <= 10 else None
 
-for c in CATEGORIES:
-    key = f"cat_{c}"
-    # Initial leer setzen, wenn noch nicht vorhanden
-    if key not in st.session_state:
-        st.session_state[key] = ""
-    # Textfeld (freie Tastatur-Eingabe), mit Platzhalter
-    values_raw[c] = st.text_input(
-        label=c,
-        value=st.session_state[key],
-        key=key,
-        placeholder="1–10"
+    for c in CATEGORIES:
+        key = f"cat_{c}"
+        # Initial leer setzen, wenn noch nicht vorhanden
+        if key not in st.session_state:
+            st.session_state[key] = ""
+        # Textfeld (freie Tastatur-Eingabe), mit Platzhalter
+        values_raw[c] = st.text_input(
+            label=c,
+            value=st.session_state[key],
+            key=key,
+            placeholder="1–10"
+        )
+        parsed = _parse_score(values_raw[c])
+        values_int[c] = parsed
+        if parsed is None:
+            invalid_fields.append(c)
+
+    # Hinweis, falls etwas fehlt/ungültig ist
+    if invalid_fields:
+        st.info("Bitte alle Kategorien mit Ziffern **1–10** ausfüllen. Offen/ungültig: " + ", ".join(invalid_fields))
+
+    # --- Validierung & Speichern ---
+    # - Button nur aktiv, wenn:
+    #   * Juror via Link korrekt eingeloggt (locked_judge)
+    #   * Crew/Alterskategorie gewählt
+    #   * alle Kategorien 1–10 (nicht leer)
+    if not locked_judge:
+        st.warning("Bitte öffne deinen persönlichen Link (mit PIN).")
+
+    all_set = (
+        locked_judge is not None
+        and crew
+        and age_group
+        and all(values_int[c] is not None for c in CATEGORIES)
     )
-    parsed = _parse_score(values_raw[c])
-    values_int[c] = parsed
-    if parsed is None:
-        invalid_fields.append(c)
-
-# Hinweis, falls etwas fehlt/ungültig ist
-if invalid_fields:
-    st.info("Bitte alle Kategorien mit Ziffern **1–10** ausfüllen. Offen/ungültig: " + ", ".join(invalid_fields))
-
-# --- Validierung & Speichern ---
-if not locked_judge:
-    st.warning("Bitte öffne deinen persönlichen Link (mit PIN).")
-
-all_set = (
-    locked_judge is not None
-    and crew
-    and age_group
-    and all(values_int[c] is not None for c in CATEGORIES)
-)
-
 
     if st.button("Speichern / Aktualisieren", type="primary", disabled=not all_set):
         # Vote-Zeile bauen
-        row = {"timestamp": dt.datetime.now().isoformat(timespec="seconds"),
-                "round": round_choice,
-                "age_group": age_group,
-                "crew": crew,
-                "judge": locked_judge}
+        row = {
+            "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
+            "round": round_choice,
+            "age_group": age_group,
+            "crew": crew,
+            "judge": locked_judge
+        }
         for c in CATEGORIES:
             row[c] = int(values_int[c])
         backend.upsert_row(["round","age_group","crew","judge"], row)
