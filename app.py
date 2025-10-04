@@ -550,6 +550,16 @@ with tabs[2]:
                 disabled=not edit_mode,  # Ganzer Grid schreibbar/gesperrt
                 key="orga_editor",
             )
+            # Schicke Ansicht mit grauen Separator-Zeilen (schreibgeschützt)
+styled = grid_preview.copy()
+def highlight_sep(row):
+    if row.get("_sep", False):
+        return ["background-color: #e0e0e0"] * len(row)
+    else:
+        return [""] * len(row)
+
+st.markdown("**Ansicht mit Hervorhebung:**")
+st.dataframe(styled.style.apply(highlight_sep, axis=1), use_container_width=True)
 
             # Live-Total nach Edits neu berechnen und (optional) separat zeigen
             grid_preview = grid.copy()
