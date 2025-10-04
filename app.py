@@ -226,8 +226,8 @@ def reset_vote_state():
         st.session_state[f"cat_{c}"] = '—'
 
 # ---------------- UI ----------------
-st.set_page_config(page_title="JDC Evaluation Tool", page_icon="🧮", layout="wide")
-st.title("🧮 JDC Evaluation Tool")
+st.set_page_config(page_title="JDC Scoring 2026", page_icon="🧮", layout="wide")
+st.title("🧮 JDC Scoring 2026")
 
 locked_judge = get_locked_judge()
 if locked_judge:
