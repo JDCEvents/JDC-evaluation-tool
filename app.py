@@ -371,7 +371,7 @@ else:
 age_groups = cfg.get_age_groups()
 
 # Wunsch-Tab aus URL lesen (?tab=Bewerten|Leaderboard|Daten%20%26%20Export|Orga)
-TAB_LABELS = ["Bewerten", "Leaderboard", "Daten & Export", "Orga"]
+TAB_LABELS = ["Bewerten", "Leaderboard", "Bewertungen", "Organisation"]
 tab_qp = (st.query_params.get("tab") or TAB_LABELS[0]).strip()
 if tab_qp not in TAB_LABELS:
     tab_qp = TAB_LABELS[0]
