@@ -742,96 +742,135 @@ with tabs[3]:
     else:
         st.success("Orga-Modus aktiv.")
 
-        # Juror:innen verwalten
+        # --- Juror:innen verwalten -------------------------------------------------
         st.markdown("### Juroren verwalten (Namen & PINs)")
         jur_df = pd.DataFrame(cfg.get_jurors())
         if jur_df.empty:
             st.warning("Noch keine Juroren in der Config. Füge neue hinzu.")
         st.dataframe(jur_df, use_container_width=True)
 
-        with st.form("add_juror"):
+        # Juror hinzufügen
+        with st.form("add_juror_form"):
             colj1, colj2 = st.columns([2, 1])
-            with colj1: new_jname = st.text_input("Name")
-            with colj2: new_jpin = st.text_input("PIN (4-stellig)", max_chars=4)
-            if st.form_submit_button("+ Juror hinzufügen") and new_jname.strip() and new_jpin.strip():
-                cfg.set_jurors(cfg.get_jurors() + [{"name": new_jname.strip(), "pin": new_jpin.strip()}])
-                st.success("Juror hinzugefügt. Seite neu laden.")
+            with colj1:
+                new_jname = st.text_input("Name", key="jur_add_name")
+            with colj2:
+                new_jpin = st.text_input("PIN (4-stellig)", max_chars=4, key="jur_add_pin")
+            if st.form_submit_button("+ Juror hinzufügen", help="Neuen Juror mit PIN anlegen"):
+                if new_jname.strip() and new_jpin.strip():
+                    cfg.set_jurors(cfg.get_jurors() + [{"name": new_jname.strip(), "pin": new_jpin.strip()}])
+                    st.success("Juror hinzugefügt. Seite neu laden.")
+                else:
+                    st.error("Bitte Name und 4-stellige PIN angeben.")
 
+        # Juror umbenennen
         if not jur_df.empty:
-            with st.form("rename_juror"):
+            with st.form("rename_juror_form"):
                 rcol1, rcol2, _ = st.columns([2, 2, 1])
-                with rcol1: old_j = st.selectbox("Juror auswählen", jur_df["name"].tolist())
-                with rcol2: new_j = st.text_input("Neuer Name")
-                if st.form_submit_button("Umbenennen") and old_j and new_j.strip():
-                    updated = []
-                    for j in cfg.get_jurors():
-                        updated.append({"name": new_j.strip(), "pin": j["pin"]} if j["name"] == old_j else j)
-                    cfg.set_jurors(updated)
-                    st.success("Juror umbenannt. Seite neu laden.")
+                with rcol1:
+                    old_j = st.selectbox("Juror auswählen", jur_df["name"].tolist(), key="jur_rename_old")
+                with rcol2:
+                    new_j = st.text_input("Neuer Name", key="jur_rename_new")
+                if st.form_submit_button("Umbenennen"):
+                    if old_j and new_j.strip():
+                        updated = []
+                        for j in cfg.get_jurors():
+                            updated.append({"name": new_j.strip(), "pin": j["pin"]} if j["name"] == old_j else j)
+                        cfg.set_jurors(updated)
+                        st.success("Juror umbenannt. Seite neu laden.")
+                    else:
+                        st.error("Bitte alten Juror wählen und neuen Namen eintragen.")
 
+        # Juror entfernen
         if not jur_df.empty:
-            with st.form("remove_juror"):
+            with st.form("remove_juror_form"):
                 dcol1, _ = st.columns([3, 1])
-                with dcol1: del_j = st.selectbox("Juror entfernen", ["—"] + jur_df["name"].tolist())
-                if st.form_submit_button("Entfernen") and del_j != "—":
-                    cfg.set_jurors([j for j in cfg.get_jurors() if j["name"] != del_j])
-                    st.success("Juror entfernt. Seite neu laden.")
+                with dcol1:
+                    del_j = st.selectbox("Juror entfernen", ["—"] + jur_df["name"].tolist(), key="jur_remove_name")
+                if st.form_submit_button("Entfernen"):
+                    if del_j != "—":
+                        cfg.set_jurors([j for j in cfg.get_jurors() if j["name"] != del_j])
+                        st.success("Juror entfernt. Seite neu laden.")
+                    else:
+                        st.error("Bitte einen Juror auswählen.")
 
         st.markdown("---")
-        # Alterskategorien & Crews
+
+        # --- Alterskategorien & Crews verwalten -----------------------------------
         st.markdown("### Alterskategorien & Crews verwalten")
+
         groups_str = ",".join(cfg.get_age_groups())
-        new_groups = st.text_input("Alterskategorien (kommagetrennt)", groups_str)
-        if st.button("Speichern (Kategorien)"):
+        new_groups = st.text_input("Alterskategorien (kommagetrennt)", groups_str, key="ag_edit_list")
+        if st.button("Speichern (Kategorien)", key="btn_save_groups"):
             groups = [g.strip() for g in new_groups.split(",") if g.strip()]
             if groups:
                 cfg.set_age_groups(groups)
                 st.success("Alterskategorien gespeichert – Seite neu laden.")
+            else:
+                st.error("Mindestens eine Kategorie angeben.")
 
-        ag = st.selectbox("Alterskategorie auswählen", cfg.get_age_groups(), key="orga_ag")
+        ag = st.selectbox("Alterskategorie auswählen", cfg.get_age_groups(), key="orga_ag_sel")
         if ag:
             current = cfg.get_crews(ag)
             df_crews = pd.DataFrame(
                 {"Startnummer": [cfg.get_start_no(ag, c) for c in current], "Crew": current}
-            ).sort_values("Startnummer")
+            ).sort_values("Startnummer", kind="mergesort")
             st.dataframe(df_crews, use_container_width=True)
 
-            new_crew = st.text_input("Neue Crew hinzufügen", "", key="orga_newcrew")
-            if st.button("+ Hinzufügen", disabled=not new_crew.strip()):
+            # Crew hinzufügen
+            new_crew = st.text_input("Neue Crew hinzufügen", "", key="orga_new_crew")
+            if st.button("+ Hinzufügen", key="btn_add_crew", disabled=not new_crew.strip()):
                 cfg.add_crew(ag, new_crew.strip())
                 st.success(f"Crew '{new_crew.strip()}' hinzugefügt. Seite neu laden.")
 
+            # Crew umbenennen
             if current:
-                with st.form("rename_crew"):
+                with st.form("rename_crew_form"):
                     rc1, rc2 = st.columns([2, 2])
-                    with rc1: oldc = st.selectbox("Crew umbenennen", current)
-                    with rc2: newc = st.text_input("Neuer Name")
-                    if st.form_submit_button("Umbenennen") and oldc and newc.strip():
-                        cfg.rename_crew(ag, oldc, newc.strip())
-                        st.success("Crew umbenannt. Seite neu laden.")
+                    with rc1:
+                        oldc = st.selectbox("Crew umbenennen", current, key="crew_rename_old")
+                    with rc2:
+                        newc = st.text_input("Neuer Name", key="crew_rename_new")
+                    if st.form_submit_button("Umbenennen"):
+                        if oldc and newc.strip():
+                            cfg.rename_crew(ag, oldc, newc.strip())
+                            st.success("Crew umbenannt. Seite neu laden.")
+                        else:
+                            st.error("Bitte bestehende Crew wählen und neuen Namen eintragen.")
 
+            # Crew entfernen
             if current:
-                with st.form("remove_crew"):
+                with st.form("remove_crew_form"):
                     dc1, _ = st.columns([3, 1])
-                    with dc1: delc = st.selectbox("Crew entfernen", ["—"] + current)
-                    if st.form_submit_button("Entfernen") and delc != "—":
-                        cfg.remove_crew(ag, delc)
-                        st.success("Crew entfernt. Seite neu laden.")
+                    with dc1:
+                        delc = st.selectbox("Crew entfernen", ["—"] + current, key="crew_remove_sel")
+                    if st.form_submit_button("Entfernen"):
+                        if delc != "—":
+                            cfg.remove_crew(ag, delc)
+                            st.success("Crew entfernt. Seite neu laden.")
+                        else:
+                            st.error("Bitte eine Crew auswählen.")
 
         st.markdown("---")
-        # Orga-Backup-Bewertung (falls Judges nicht bewerten können)
+
+        # --- Orga-Backup-Bewertung (Notfall) --------------------------------------
         st.markdown("### Orga-Backup-Bewertung (nur Notfall)")
         juror_names = [j["name"] for j in cfg.get_jurors()]
         col0, col1, col2 = st.columns([1, 1, 1])
-        with col0: age_group2 = st.selectbox("Alterskategorie (Orga)", cfg.get_age_groups(), key="age_group_org")
-        with col1: round_choice2 = st.radio("Runde (Orga)", ["1", "ZW"], horizontal=True, key="round_org")
-        with col2: judge2 = st.selectbox("Juror (Orga)", juror_names, key="judge_org")
-        crew2 = st.text_input("Crew (Orga – manuell oder aus Liste)")
+        with col0:
+            age_group2 = st.selectbox("Alterskategorie (Orga)", cfg.get_age_groups(), key="age_group_org")
+        with col1:
+            round_choice2 = st.radio("Runde (Orga)", ["1", "ZW"], horizontal=True, key="round_org")
+        with col2:
+            judge2 = st.selectbox("Juror (Orga)", juror_names, key="judge_org")
+        crew2 = st.text_input("Crew (Orga – manuell oder aus Liste)", key="crew_org_input")
+
         nums2 = {}
         for c in CATEGORIES:
-            nums2[c] = st.selectbox(f"{c} (Orga)", ["—"] + [str(i) for i in range(1, 11)], key=f"org_{c}")
+            nums2[c] = st.selectbox(f"{c} (Orga)", ["—"] + [str(i) for i in range(1, 11)], key=f"org_score_{c}")
+
         all_set_org = crew2.strip() and age_group2 and all(v != "—" for v in nums2.values())
-        if st.button("Orga-Bewertung speichern", disabled=not all_set_org):
+        if st.button("Orga-Bewertung speichern", key="btn_orgasave", disabled=not all_set_org):
             row = {
                 "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
                 "round": round_choice2,
@@ -843,65 +882,64 @@ with tabs[3]:
                 row[c] = int(nums2[c])
             backend.upsert_row(["round", "age_group", "crew", "judge"], row)
             st.success("Orga-Bewertung gespeichert.")
-            # ---------- TAB 3: ORGA ----------
-with tabs[3]:
-    st.subheader("Orga")
 
-    if not orga_mode:
-        st.info("Orga-Modus aktivieren: URL mit `?orga=1&orgapin=XXXX`.")
-    else:
-        st.success("Orga-Modus aktiv.")
-
-        # ... hier kommt der ganze bisherige Orga-Code ...
-
-        if st.button("Orga-Bewertung speichern", disabled=not all_set_org):
-            row = {...}
-            ...
-            st.success("Orga-Bewertung gespeichert.")
-
-        # ⬇️ Wertungsdaten löschen⬇️
         st.markdown("---")
+
+        # --- Gefahrzone: 4-stufiger Bestätigungs-Flow zum Voll-Reset --------------
         st.markdown("### ❌ Gefahrzone: Alle Wertungsdaten löschen (nur Orga)")
+
         if "wipe_confirm_step" not in st.session_state:
             st.session_state["wipe_confirm_step"] = 0
 
-        if st.session_state["wipe_confirm_step"] == 0:
-            if st.button("Alle Wertungsdaten löschen"):
+        step = st.session_state["wipe_confirm_step"]
+
+        if step == 0:
+            if st.button("Alle Wertungsdaten löschen", key="wipe_step0"):
                 st.session_state["wipe_confirm_step"] = 1
                 st.rerun()
 
-        elif st.session_state["wipe_confirm_step"] == 1:
-            st.warning("❓ Bist du dir absolut sicher, dass du ALLE Wertungen löschen willst?")
-            if st.button("Ja, weiter"):
-                st.session_state["wipe_confirm_step"] = 2
-                st.rerun()
-            if st.button("Abbrechen"):
-                st.session_state["wipe_confirm_step"] = 0
-                st.rerun()
-
-        elif st.session_state["wipe_confirm_step"] == 2:
-            st.error("⚠️ Mit diesem Schritt werden ALLE bisher abgegebenen Daten gelöscht!")
-            if st.button("Ja, ich möchte trotzdem fortfahren"):
-                st.session_state["wipe_confirm_step"] = 3
-                st.rerun()
-            if st.button("Abbrechen"):
-                st.session_state["wipe_confirm_step"] = 0
-                st.rerun()
-
-        elif st.session_state["wipe_confirm_step"] == 3:
-            st.error("🚨 LETZTE WARNUNG! JETZT werden wirklich ALLE Daten gelöscht.")
-            if st.button("JETZT HIER ALLE Daten löschen"):
-                import os
-                try:
-                    if pathlib.Path(backend.path).exists():
-                        os.remove(backend.path)
-                    backend = CSVBackend("data.csv")  # neue leere CSV sofort erzeugen
-                    st.success("✅ Alle Wertungen wurden gelöscht. Die Datenbank ist jetzt leer.")
+        elif step == 1:
+            st.warning("❓ Bist du dir absolut sicher, dass du **ALLE** Wertungen löschen willst?")
+            cols = st.columns(2)
+            with cols[0]:
+                if st.button("Ja, weiter", key="wipe_yes1"):
+                    st.session_state["wipe_confirm_step"] = 2
+                    st.rerun()
+            with cols[1]:
+                if st.button("Abbrechen", key="wipe_cancel1"):
                     st.session_state["wipe_confirm_step"] = 0
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Fehler beim Löschen: {e}")
-            if st.button("Abbrechen"):
-                st.session_state["wipe_confirm_step"] = 0
-                st.rerun()
+
+        elif step == 2:
+            st.error("⚠️ Mit diesem Schritt werden **ALLE** bisher abgegebenen Daten von den Judges gelöscht!")
+            cols = st.columns(2)
+            with cols[0]:
+                if st.button("Ja, ich möchte trotzdem fortfahren", key="wipe_yes2"):
+                    st.session_state["wipe_confirm_step"] = 3
+                    st.rerun()
+            with cols[1]:
+                if st.button("Abbrechen", key="wipe_cancel2"):
+                    st.session_state["wipe_confirm_step"] = 0
+                    st.rerun()
+
+        elif step == 3:
+            st.error("🚨 **LETZTE WARNUNG!** JETZT werden wirklich ALLE Daten gelöscht.")
+            cols = st.columns(2)
+            with cols[0]:
+                if st.button("JETZT HIER ALLE Daten löschen", key="wipe_delete"):
+                    import os
+                    try:
+                        if pathlib.Path(backend.path).exists():
+                            os.remove(backend.path)
+                        # neue leere CSV sofort erzeugen
+                        backend = CSVBackend("data.csv")
+                        st.success("✅ Alle Wertungen wurden gelöscht. Die Datenbank ist jetzt leer.")
+                        st.session_state["wipe_confirm_step"] = 0
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler beim Löschen: {e}")
+            with cols[1]:
+                if st.button("Abbrechen", key="wipe_cancel3"):
+                    st.session_state["wipe_confirm_step"] = 0
+                    st.rerun()
 
