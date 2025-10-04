@@ -922,24 +922,43 @@ with tabs[3]:
                     st.session_state["wipe_confirm_step"] = 0
                     st.rerun()
 
-        elif step == 3:
-            st.error("🚨 **LETZTE WARNUNG!** JETZT werden wirklich ALLE Daten gelöscht.")
-            cols = st.columns(2)
-            with cols[0]:
-                if st.button("JETZT HIER ALLE Daten löschen", key="wipe_delete"):
-                    import os
-                    try:
-                        if pathlib.Path(backend.path).exists():
-                            os.remove(backend.path)
-                        # neue leere CSV sofort erzeugen
-                        backend = CSVBackend("data.csv")
-                        st.success("✅ Alle Wertungen wurden gelöscht. Die Datenbank ist jetzt leer.")
-                        st.session_state["wipe_confirm_step"] = 0
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Fehler beim Löschen: {e}")
-            with cols[1]:
-                if st.button("Abbrechen", key="wipe_cancel3"):
-                    st.session_state["wipe_confirm_step"] = 0
-                    st.rerun()
+       elif step == 3:
+    st.error("🚨 **LETZTE WARNUNG!** JETZT werden wirklich ALLE Daten gelöscht.")
+
+    # 1) Backup-Export anbieten (aktuelle CSV sichern)
+    try:
+        _df_backup = backend.load().copy()
+    except Exception:
+        _df_backup = pd.DataFrame(columns=["timestamp","round","age_group","crew","judge", *CATEGORIES, "TotalWeighted"])
+    csv_backup = _df_backup.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "⬇️ Aktuelle Daten als CSV sichern (empfohlen)",
+        data=csv_backup,
+        file_name="scores_backup.csv",
+        mime="text/csv",
+        key="wipe_backup_download",
+        help="Lade ein Backup der aktuellen Wertungen herunter, bevor du alles löschst."
+    )
+
+    st.write("")  # kleiner Abstand
+
+    # 2) Finale Aktion / Abbruch
+    cols = st.columns(2)
+    with cols[0]:
+        if st.button("JETZT HIER ALLE Daten löschen", key="wipe_delete"):
+            import os
+            try:
+                if pathlib.Path(backend.path).exists():
+                    os.remove(backend.path)
+                # neue leere CSV sofort erzeugen
+                backend = CSVBackend("data.csv")
+                st.success("✅ Alle Wertungen wurden gelöscht. Die Datenbank ist jetzt leer.")
+                st.session_state["wipe_confirm_step"] = 0
+                st.rerun()
+            except Exception as e:
+                st.error(f"Fehler beim Löschen: {e}")
+    with cols[1]:
+        if st.button("Abbrechen", key="wipe_cancel3"):
+            st.session_state["wipe_confirm_step"] = 0
+            st.rerun()
 
