@@ -436,13 +436,13 @@ with tabs[1]:
         winner = board.iloc[0]
         st.markdown(f"🏆 **Sieger Zwischenrunde ({age_view})**: **{winner['Crew']}** (Total {int(winner['Total'])}) → **Finale**")
 
-# ---------- TAB 2: DATEN & EXPORT (gruppiert, Lücken, Orga-Edit + Auto-Total) ----------
+# ---------- TAB 2: DATEN & EXPORT (gruppiert, Lücken, Orga-Edit + Auto-Total + Hervorhebung) ----------
 with tabs[2]:
     st.subheader("Daten & Export")
 
     df_all = backend.load()
 
-    # --- kleine Helper ---
+    # --- Helper ---
     def _start_no_safe(age, crew):
         try:
             return cfg.get_start_no(age, crew)
@@ -450,7 +450,7 @@ with tabs[2]:
             return None
 
     def _compute_weighted_local(row: Dict) -> int:
-        # gleiche Logik wie im Backend (für Live-Vorschau)
+        """Lokale Neuberechnung wie im Backend (für Live-Vorschau im Grid)."""
         total = 0
         for c in CATEGORIES:
             v = row.get(c, 0)
@@ -500,7 +500,7 @@ with tabs[2]:
             if round_filter != "Alle":
                 df_view = df_view[df_view["round"] == round_filter]
 
-            # Sortierung & Startnummer
+            # Startnummer + Standardsortierung
             df_view["Startnummer"] = df_view.apply(lambda r: _start_no_safe(r["age_group"], r["crew"]), axis=1)
             df_view = df_view.sort_values(
                 by=["Startnummer", "crew", "judge", "timestamp"],
@@ -516,9 +516,7 @@ with tabs[2]:
             df_view["_sep"] = False
             df_sep = _with_separators(df_view, group_col="crew")
 
-            # Live neu berechnete TotalWeighted (für Anzeige: auch nach Edits)
-            # Hinweis: Data Editor gibt uns 'grid' zurück (ggf. editiert) – darauf rechnen wir gleich erneut.
-            # Für die Erstanzeige rechnen wir schon einmal:
+            # Für die Erstanzeige: Total gewichtet live berechnen (Separatoren ignorieren)
             tmp = df_sep.copy()
             tmp["TotalWeighted"] = tmp.apply(
                 lambda r: _compute_weighted_local(r) if not r.get("_sep", False) else None, axis=1
@@ -526,28 +524,26 @@ with tabs[2]:
 
             st.markdown("**Rohdaten (gruppiert nach Crew, mit Leerzeilen für Schnellcheck):**")
 
-            # Nur Kategorien editierbar; Separator-Zeilen bleiben deaktiviert
+            # Nur Kategorien editierbar; alles andere gesperrt
             editable_cols = [c for c in CATEGORIES if c in tmp.columns]
-            disabled_map = {
+            column_cfg = {
                 "Startnummer": st.column_config.NumberColumn("Startnummer", disabled=True),
                 "age_group": st.column_config.TextColumn("Alterskategorie", disabled=True),
                 "round": st.column_config.TextColumn("Runde", disabled=True),
                 "crew": st.column_config.TextColumn("Crew", disabled=True),
                 "judge": st.column_config.TextColumn("Juror", disabled=True),
                 "timestamp": st.column_config.TextColumn("Zeitstempel", disabled=True),
-                "_sep": st.column_config.CheckboxColumn("_sep", disabled=True, help="Interne Markierung"),
-                # TotalWeighted zeigen wir schreibgeschützt an (berechnen wir live)
                 "TotalWeighted": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
+                "_sep": st.column_config.CheckboxColumn("_sep", disabled=True, help="Interne Markierung"),
+                **{c: st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1) for c in editable_cols},
             }
-            for c in editable_cols:
-                disabled_map[c] = st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1)
 
-                        grid = st.data_editor(
+            grid = st.data_editor(
                 tmp,
                 use_container_width=True,
                 hide_index=True,
-                column_config=disabled_map,
-                disabled=not edit_mode,  # Ganzer Grid schreibbar/gesperrt
+                column_config=column_cfg,
+                disabled=not edit_mode,  # gesamter Grid schreibbar/gesperrt
                 key="orga_editor",
             )
 
@@ -560,23 +556,14 @@ with tabs[2]:
 
             # Schicke Ansicht mit grauen Separator-Zeilen (schreibgeschützt)
             styled = grid_preview.copy()
-            def highlight_sep(row):
+
+            def _highlight_sep(row):
                 if row.get("_sep", False):
-                    return ["background-color: #e0e0e0"] * len(row)
-                else:
-                    return [""] * len(row)
+                    return ["background-color: #e9e9e9"] * len(row)  # hellgrau
+                return [""] * len(row)
 
             st.markdown("**Ansicht mit Hervorhebung:**")
-            st.dataframe(styled.style.apply(highlight_sep, axis=1), use_container_width=True)
-
-
-            # Live-Total nach Edits neu berechnen und (optional) separat zeigen
-            grid_preview = grid.copy()
-            # Separatoren ignorieren
-            mask_real = ~grid_preview["_sep"].fillna(False)
-            grid_preview.loc[mask_real, "TotalWeighted"] = grid_preview[mask_real].apply(
-                lambda r: _compute_weighted_local(r), axis=1
-            )
+            st.dataframe(styled.style.apply(_highlight_sep, axis=1), use_container_width=True)
 
             # Speichern nur im Edit-Mode anzeigen
             if edit_mode:
@@ -594,13 +581,12 @@ with tabs[2]:
                 invalid_mask = mask_real & (~grid_preview.apply(_valid_row, axis=1))
                 invalid_count = int(invalid_mask.sum())
 
-                col_save, col_info = st.columns([1, 5])
+                col_save, _ = st.columns([1, 5])
                 with col_save:
                     save_disabled = invalid_count > 0
                     if st.button("Änderungen speichern", type="primary", disabled=save_disabled):
-                        # Nur echte Zeilen, Separatoren raus
+                        # Nur echte Zeilen (Separatoren raus), Upsert per Key
                         edited_df = grid_preview[mask_real].copy()
-                        # Zurückschreiben mit Upsert-Key; Backend berechnet TotalWeighted final neu
                         updates = 0
                         for _, r in edited_df.iterrows():
                             row = {
@@ -616,6 +602,7 @@ with tabs[2]:
                             updates += 1
                         st.success(f"Änderungen gespeichert ({updates} Zeilen aktualisiert).")
                         st.rerun()
+
                 if invalid_count > 0:
                     st.warning("Bitte alle bearbeiteten Kategorien mit **1–10** füllen (keine leeren/ungültigen Werte).")
 
@@ -637,10 +624,20 @@ with tabs[2]:
                 df_pub = df_pub[df_pub["age_group"] == age_filter]
             df_pub["Startnummer"] = df_pub.apply(lambda r: _start_no_safe(r["age_group"], r["crew"]), axis=1)
             df_pub = df_pub.sort_values(by=["Startnummer", "crew", "judge", "timestamp"], ascending=True, kind="mergesort")
-            st.dataframe(df_pub, use_container_width=True)
+
+            # Schreibgeschützte Darstellung mit grauen Separator-Zeilen (nur Optik)
+            df_pub["_sep"] = False
+            df_pub = _with_separators(df_pub, group_col="crew")
+
+            def _highlight_sep_public(row):
+                if row.get("_sep", False):
+                    return ["background-color: #e9e9e9"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(df_pub.style.apply(_highlight_sep_public, axis=1), use_container_width=True)
             st.download_button(
                 "CSV herunterladen",
-                data=df_pub.to_csv(index=False).encode("utf-8"),
+                data=df_pub.drop(columns=["_sep"], errors="ignore").to_csv(index=False).encode("utf-8"),
                 file_name="scores_export.csv",
                 mime="text/csv",
             )
