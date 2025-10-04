@@ -598,7 +598,34 @@ with tabs[2]:
                         st.success(f"Änderungen gespeichert ({updates} Zeilen aktualisiert).")
                         st.rerun()
                 if invalid_count > 0:
-                    st.warning("
+                    st.warning("Bitte alle bearbeiteten Kategorien mit **1–10** füllen (keine leeren/ungültigen Werte).")
+
+            # Export (gefiltert, ohne Separatoren)
+            export_df = df_view.copy()
+            csv_bytes = export_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "CSV herunterladen (gefiltert, ohne Separatoren)",
+                data=csv_bytes,
+                file_name="scores_export.csv",
+                mime="text/csv",
+            )
+
+        else:
+            # ---- Nicht-Orga: schreibgeschützte, einfache Ansicht ----
+            age_filter = st.selectbox("Alterskategorie filtern", ["Alle"] + age_groups, index=0, key="raw_age_filter_public")
+            df_pub = df_all.copy()
+            if age_filter != "Alle":
+                df_pub = df_pub[df_pub["age_group"] == age_filter]
+            df_pub["Startnummer"] = df_pub.apply(lambda r: _start_no_safe(r["age_group"], r["crew"]), axis=1)
+            df_pub = df_pub.sort_values(by=["Startnummer", "crew", "judge", "timestamp"], ascending=True, kind="mergesort")
+            st.dataframe(df_pub, use_container_width=True)
+            st.download_button(
+                "CSV herunterladen",
+                data=df_pub.to_csv(index=False).encode("utf-8"),
+                file_name="scores_export.csv",
+                mime="text/csv",
+            )
+
 
 
 # ---------- TAB 3: ORGA ----------
