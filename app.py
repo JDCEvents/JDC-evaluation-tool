@@ -843,3 +843,65 @@ with tabs[3]:
                 row[c] = int(nums2[c])
             backend.upsert_row(["round", "age_group", "crew", "judge"], row)
             st.success("Orga-Bewertung gespeichert.")
+            # ---------- TAB 3: ORGA ----------
+with tabs[3]:
+    st.subheader("Orga")
+
+    if not orga_mode:
+        st.info("Orga-Modus aktivieren: URL mit `?orga=1&orgapin=XXXX`.")
+    else:
+        st.success("Orga-Modus aktiv.")
+
+        # ... hier kommt der ganze bisherige Orga-Code ...
+
+        if st.button("Orga-Bewertung speichern", disabled=not all_set_org):
+            row = {...}
+            ...
+            st.success("Orga-Bewertung gespeichert.")
+
+        # ⬇️ Wertungsdaten löschen⬇️
+        st.markdown("---")
+        st.markdown("### ❌ Gefahrzone: Alle Wertungsdaten löschen (nur Orga)")
+        if "wipe_confirm_step" not in st.session_state:
+            st.session_state["wipe_confirm_step"] = 0
+
+        if st.session_state["wipe_confirm_step"] == 0:
+            if st.button("Alle Wertungsdaten löschen"):
+                st.session_state["wipe_confirm_step"] = 1
+                st.rerun()
+
+        elif st.session_state["wipe_confirm_step"] == 1:
+            st.warning("❓ Bist du dir absolut sicher, dass du ALLE Wertungen löschen willst?")
+            if st.button("Ja, weiter"):
+                st.session_state["wipe_confirm_step"] = 2
+                st.rerun()
+            if st.button("Abbrechen"):
+                st.session_state["wipe_confirm_step"] = 0
+                st.rerun()
+
+        elif st.session_state["wipe_confirm_step"] == 2:
+            st.error("⚠️ Mit diesem Schritt werden ALLE bisher abgegebenen Daten gelöscht!")
+            if st.button("Ja, ich möchte trotzdem fortfahren"):
+                st.session_state["wipe_confirm_step"] = 3
+                st.rerun()
+            if st.button("Abbrechen"):
+                st.session_state["wipe_confirm_step"] = 0
+                st.rerun()
+
+        elif st.session_state["wipe_confirm_step"] == 3:
+            st.error("🚨 LETZTE WARNUNG! JETZT werden wirklich ALLE Daten gelöscht.")
+            if st.button("JETZT HIER ALLE Daten löschen"):
+                import os
+                try:
+                    if pathlib.Path(backend.path).exists():
+                        os.remove(backend.path)
+                    backend = CSVBackend("data.csv")  # neue leere CSV sofort erzeugen
+                    st.success("✅ Alle Wertungen wurden gelöscht. Die Datenbank ist jetzt leer.")
+                    st.session_state["wipe_confirm_step"] = 0
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Fehler beim Löschen: {e}")
+            if st.button("Abbrechen"):
+                st.session_state["wipe_confirm_step"] = 0
+                st.rerun()
+
