@@ -375,11 +375,11 @@ tabs = st.tabs(["Bewerten", "Leaderboard", "Daten & Export", "Orga"])
 with tabs[0]:
     st.subheader("Bewertung abgeben")
 
-    # Wenn Juror: erst nach Login freischalten
+    # Nicht-Orga: erst PIN-Login (privater Link ?judge=Name)
     if not orga_mode and not locked_judge:
         st.info("Nach erfolgreicher PIN-Eingabe erscheint hier deine Bewertungsmaske.")
     else:
-        # Kopf-Auswahl
+        # --- Kopf-Auswahl ---
         col0, col1, col2 = st.columns([1, 1, 1])
         with col0:
             age_group = st.selectbox("Alterskategorie", age_groups, index=0 if age_groups else None, key="age_group_sel")
@@ -389,6 +389,18 @@ with tabs[0]:
         with col2:
             round_choice = st.radio("Runde", ["1", "ZW"], horizontal=True, key="round_sel")
 
+        # Orga darf einen Juror wählen (Eingabe im Namen dieses Jurors)
+        judge_name = None
+        if orga_mode:
+            juror_names = [j["name"] for j in cfg.get_jurors()]
+            if not juror_names:
+                st.warning("Keine Juroren in der Config. Lege welche im Orga-Tab an.")
+            judge_name = st.selectbox("Juror (im Namen von)", ["—"] + juror_names, index=0, key="orga_judge_sel")
+        else:
+            judge_name = st.session_state.get("judge_authed_name")
+            if judge_name:
+                st.success(f"Hallo {judge_name} 👋 – du bist eingeloggt.")
+
         # Reset bei Crew-Wechsel
         if "last_crew" not in st.session_state:
             st.session_state["last_crew"] = ""
@@ -396,9 +408,10 @@ with tabs[0]:
             reset_vote_state()
             st.session_state["last_crew"] = crew
 
-        # Eingabefelder (Keyboard 1–10)
+        # --- Eingabefelder (Tastatur 1–10) ---
         st.markdown("### Kategorien (bitte jede Kategorie als Zahl 1–10 eingeben)")
         values_raw, values_int, invalid_fields = {}, {}, []
+
         def _parse_score(s: str):
             s = (s or "").strip()
             if not s or not s.isdigit():
@@ -416,27 +429,40 @@ with tabs[0]:
             if parsed is None:
                 invalid_fields.append(c)
 
-        if not orga_mode:
-            st.success(f"Hallo {st.session_state.get('judge_authed_name')} 👋 – du bist eingeloggt.")
-
         if invalid_fields:
             st.info("Bitte alle Kategorien mit **1–10** ausfüllen. Offen/ungültig: " + ", ".join(invalid_fields))
 
-        # Save nur wenn gültig
-        judge_name = st.session_state.get("judge_authed_name") if not orga_mode else None
-        all_set = (crew and age_group and (orga_mode or judge_name) and all(values_int[c] is not None for c in CATEGORIES))
+        # --- Speichern / Aktualisieren ---
+        # Wer ist der Juror, in dessen Namen gespeichert wird?
+        if orga_mode:
+            effective_judge = None if judge_name in (None, "—") else judge_name
+        else:
+            effective_judge = judge_name  # aus PIN-Login
 
-        if st.button("Speichern / Aktualisieren", type="primary", disabled=not all_set):
+        all_set = (
+            crew
+            and age_group
+            and (effective_judge is not None)  # Orga muss Juror wählen; Judge-Modus bereits eingeloggt
+            and all(values_int[c] is not None for c in CATEGORIES)
+        )
+
+        if orga_mode and effective_judge is None:
+            st.warning("Bitte oben einen **Juror** auswählen, in dessen Namen du speicherst.")
+
+        if st.button("Speichern / Aktualisieren", type="primary", disabled=not all_set, key="btn_save_scores"):
             row = {
                 "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
                 "round": round_choice,
                 "age_group": age_group,
                 "crew": crew,
-                "judge": judge_name if judge_name else "Orga",
+                "judge": effective_judge,
             }
             for c in CATEGORIES:
                 row[c] = int(values_int[c])
+
+            # Upsert nach (round, age_group, crew, judge) – wie gehabt
             backend.upsert_row(["round", "age_group", "crew", "judge"], row)
+
             st.success(
                 f"Bewertung gespeichert: {crew} (Startnr. {cfg.get_start_no(age_group, crew)}), "
                 f"{age_group}, Runde {round_choice}, Juror {row['judge']}."
