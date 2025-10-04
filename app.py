@@ -442,15 +442,47 @@ with tab_bewerten:
     if not orga_mode and not locked_judge:
         st.info("Nach erfolgreicher PIN-Eingabe erscheint hier deine Bewertungsmaske.")
     else:
-        # --- Kopf-Auswahl ---
+        
+    # --- Kopf-Auswahl (mit Crew-Filterung für Jury) ---
         col0, col1, col2 = st.columns([1, 1, 1])
         with col0:
             age_group = st.selectbox("Alterskategorie", age_groups, index=0 if age_groups else None, key="age_group_sel")
-        with col1:
-            crews_for_age = cfg.get_crews(age_group) if age_group else []
-            crew = st.selectbox("Crew", crews_for_age, index=0 if crews_for_age else None, key="crew_sel")
         with col2:
             round_choice = st.radio("Runde", ["1", "ZW"], horizontal=True, key="round_sel")
+
+        # Crews laden (abhängig von Modus)
+        if orga_mode:
+            with col1:
+                crews_for_age = cfg.get_crews(age_group) if age_group else []
+                crew = st.selectbox("Crew", crews_for_age, index=0 if crews_for_age else None, key="crew_sel")
+        else:
+            # Juror-Ansicht: nur Crews anzeigen, die dieser Juror in dieser Runde NICHT bewertet hat
+            df_all = backend.load()
+            judge_name = st.session_state.get("judge_authed_name")
+
+            if age_group and judge_name:
+                df_all["round"] = df_all["round"].astype(str).replace({"1.0": "1", "ZW.0": "ZW"})
+                already_voted = df_all[
+                    (df_all["judge"] == judge_name) & 
+                    (df_all["age_group"] == age_group) & 
+                    (df_all["round"] == round_choice)
+                ]["crew"].unique().tolist()
+            else:
+                already_voted = []
+
+            crews_for_age = [c for c in cfg.get_crews(age_group) if c not in already_voted] if age_group else []
+
+            with col1:
+                crew = st.selectbox(
+                    "Crew", 
+                    crews_for_age, 
+                    index=0 if crews_for_age else None, 
+                    key="crew_sel"
+                )
+
+            if not crews_for_age:
+                st.info("Alle Crews in dieser Runde wurden bereits von dir bewertet ✅")
+
 
         # Orga darf einen Juror wählen (Eingabe im Namen dieses Jurors)
         judge_name = None
