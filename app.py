@@ -338,7 +338,7 @@ st.title("🧮 JDC Scoring 2026")
 # --------------------------------------------------------------------
 locked_judge = get_locked_judge()
 if locked_judge:
-    st.success(f"Hallo {locked_judge} 👋 – deine Seite ist personalisiert.")
+    st.success(f"Hallo {locked_judge} 👋 – schön dich bei uns zu haben!")
 else:
     st.info("Tipp: Verwende personalisierte Links: ?judge=Name&pin=XXXX.")
 
