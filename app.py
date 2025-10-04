@@ -368,20 +368,19 @@ else:
     # Juror:innen sehen keine Sidebar-Settings
     finalists_n = 5  # Default; Orga kann dies im Orga-Modus anpassen
 
-# ===== TABS mit "Anheften"-Funktion (bleibt nach Reload auf aktivem Tab) =====
 age_groups = cfg.get_age_groups()
 
+# Wunsch-Tab aus URL lesen (?tab=Bewerten|Leaderboard|Daten%20%26%20Export|Orga)
 TAB_LABELS = ["Bewerten", "Leaderboard", "Daten & Export", "Orga"]
-# ?tab=Bewerten|Leaderboard|Daten%20%26%20Export|Orga
 tab_qp = (st.query_params.get("tab") or TAB_LABELS[0]).strip()
 if tab_qp not in TAB_LABELS:
     tab_qp = TAB_LABELS[0]
 
-# Aktives Tab zuerst -> ist beim Rendern aktiv
+# Dieses Tab zuerst anordnen → es ist beim Reload aktiv
 ordered = [tab_qp] + [t for t in TAB_LABELS if t != tab_qp]
-_tab_objs = st.tabs(ordered)
-tab_map = {label: _tab_objs[ordered.index(label)] for label in TAB_LABELS}
+tabs = st.tabs(ordered)
 
+# Helfer: „Anheften“-Button oben in jedem Tab einblenden
 def pin_this_tab(tab_name: str, key_suffix: str):
     col_pin, _ = st.columns([1, 8])
     with col_pin:
@@ -389,13 +388,13 @@ def pin_this_tab(tab_name: str, key_suffix: str):
             st.query_params["tab"] = tab_name
             st.success("Ansicht angeheftet – Reload bleibt auf dieser Seite.")
 
-# ===== TAB 0: BEWERTEN =====
-with tab_map["Bewerten"]:
-    pin_this_tab("Bewerten", "bew")
+
+# ---------- TAB 0: BEWERTEN ----------
+with tabs[0]:
     st.subheader("Bewertung abgeben")
 
     # Nicht-Orga: erst PIN-Login (privater Link ?judge=Name)
-    if not orga_mode and not st.session_state.get("judge_authed_name"):
+    if not orga_mode and not locked_judge:
         st.info("Nach erfolgreicher PIN-Eingabe erscheint hier deine Bewertungsmaske.")
     else:
         # --- Kopf-Auswahl ---
@@ -409,16 +408,16 @@ with tab_map["Bewerten"]:
             round_choice = st.radio("Runde", ["1", "ZW"], horizontal=True, key="round_sel")
 
         # Orga darf einen Juror wählen (Eingabe im Namen dieses Jurors)
+        judge_name = None
         if orga_mode:
             juror_names = [j["name"] for j in cfg.get_jurors()]
+            if not juror_names:
+                st.warning("Keine Juroren in der Config. Lege welche im Orga-Tab an.")
             judge_name = st.selectbox("Juror (im Namen von)", ["—"] + juror_names, index=0, key="orga_judge_sel")
-            effective_judge = None if judge_name in (None, "—") else judge_name
-            if effective_judge is None:
-                st.warning("Bitte oben einen **Juror** auswählen, in dessen Namen du speicherst.")
         else:
-            effective_judge = st.session_state.get("judge_authed_name")
-            if effective_judge:
-                st.success(f"Hallo {effective_judge} 👋 – du bist eingeloggt.")
+            judge_name = st.session_state.get("judge_authed_name")
+            if judge_name:
+                st.success(f"Hallo {judge_name} 👋 – du bist eingeloggt.")
 
         # Reset bei Crew-Wechsel
         if "last_crew" not in st.session_state:
@@ -451,12 +450,22 @@ with tab_map["Bewerten"]:
         if invalid_fields:
             st.info("Bitte alle Kategorien mit **1–10** ausfüllen. Offen/ungültig: " + ", ".join(invalid_fields))
 
+        # --- Speichern / Aktualisieren ---
+        # Wer ist der Juror, in dessen Namen gespeichert wird?
+        if orga_mode:
+            effective_judge = None if judge_name in (None, "—") else judge_name
+        else:
+            effective_judge = judge_name  # aus PIN-Login
+
         all_set = (
             crew
             and age_group
-            and (effective_judge is not None)
+            and (effective_judge is not None)  # Orga muss Juror wählen; Judge-Modus bereits eingeloggt
             and all(values_int[c] is not None for c in CATEGORIES)
         )
+
+        if orga_mode and effective_judge is None:
+            st.warning("Bitte oben einen **Juror** auswählen, in dessen Namen du speicherst.")
 
         if st.button("Speichern / Aktualisieren", type="primary", disabled=not all_set, key="btn_save_scores"):
             row = {
@@ -468,16 +477,18 @@ with tab_map["Bewerten"]:
             }
             for c in CATEGORIES:
                 row[c] = int(values_int[c])
+
+            # Upsert nach (round, age_group, crew, judge) – wie gehabt
             backend.upsert_row(["round", "age_group", "crew", "judge"], row)
+
             st.success(
                 f"Bewertung gespeichert: {crew} (Startnr. {cfg.get_start_no(age_group, crew)}), "
                 f"{age_group}, Runde {round_choice}, Juror {row['judge']}."
             )
             reset_vote_state()
 
-# ===== TAB 1: LEADERBOARD =====
-with tab_map["Leaderboard"]:
-    pin_this_tab("Leaderboard", "lead")
+# ---------- TAB 1: LEADERBOARD ----------
+with tabs[1]:
     st.subheader("Leaderboard")
     df_all = backend.load()
     colf1, colf2 = st.columns([1, 2])
@@ -496,12 +507,11 @@ with tab_map["Leaderboard"]:
     board = compute_leaderboard(df_view.copy())
     st.dataframe(board, use_container_width=True)
 
+    # Finalisten/ZW nur Info – Steuerung (Top N) ist Orga-only (Sidebar)
     if round_view == "1" and not board.empty:
-        finalists = board.head(st.session_state.get("finalists_n", 5) if not orga_mode else st.sidebar.selectbox)
-        finalists = board.head(5 if not orga_mode else board.shape[0])  # Fallback safety; Visualisierung bleibt
-        finalists = board.head(5)
-        rest = board.iloc[5:]
-        st.markdown(f"**Direkt im Finale (Top 5) – {age_view}**")
+        finalists = board.head(finalists_n)
+        rest = board.iloc[finalists_n:]
+        st.markdown(f"**Direkt im Finale (Top {finalists_n}) – {age_view}**")
         st.dataframe(finalists[["Rank", "Crew", "Total", "Judges"]], use_container_width=True)
         if not rest.empty:
             st.markdown(f"**Zwischenrunde ({age_view})**")
@@ -510,24 +520,26 @@ with tab_map["Leaderboard"]:
         winner = board.iloc[0]
         st.markdown(f"🏆 **Sieger Zwischenrunde ({age_view})**: **{winner['Crew']}** (Total {int(winner['Total'])}) → **Finale**")
 
-# ===== TAB 2: DATEN & EXPORT (Editor oben, Separatoren; Edit standardmäßig AN) =====
-with tab_map["Daten & Export"]:
-    pin_this_tab("Daten & Export", "data")
+# ---------- TAB 2: DATEN & EXPORT (gruppiert, dunkle Separatoren, Orga-Edit + Auto-Total + Konsistenz-Fix) ----------
+with tabs[2]:
     st.subheader("Daten & Export")
 
     df_all = backend.load().copy()
 
+    # -------- Helper / Normalisierung --------
     def _to_str(x):
         if pd.isna(x):
             return ""
         return str(x).strip()
 
     if not df_all.empty:
+        # Runde vereinheitlichen ("1" / "ZW")
         df_all["round"] = df_all["round"].apply(_to_str).replace({"1.0": "1", "ZW.0": "ZW"})
         for cc in ["age_group", "crew", "judge", "timestamp"]:
             if cc in df_all.columns:
                 df_all[cc] = df_all[cc].apply(_to_str)
 
+    # Crew-Index aus Config: Crew -> (age_group, start_no)
     def _build_crew_index():
         idx = {}
         for ag in cfg.get_age_groups():
@@ -536,12 +548,14 @@ with tab_map["Daten & Export"]:
                 if c not in idx:
                     idx[c] = (ag, sn)
                 else:
-                    idx[c] = None
+                    idx[c] = None  # sollte nicht passieren; markiere ambivalent
         return idx
 
     CREW_INDEX = _build_crew_index()
 
     def _derive_ag_sn(ag_in, crew):
+        """Gibt (age_group, start_no, changed_flag) zurück.
+        Falls age_group leer/falsch ist, nimm die aus der Config."""
         if crew in CREW_INDEX and CREW_INDEX[crew]:
             ag_cfg, sn_cfg = CREW_INDEX[crew]
             if not ag_in or ag_in != ag_cfg:
@@ -552,14 +566,20 @@ with tab_map["Daten & Export"]:
     def _compute_weighted_local(row: Dict) -> int:
         total = 0
         for c in CATEGORIES:
+            v = row.get(c, 0)
             try:
-                v = int(row.get(c, 0))
+                v = int(v)
             except Exception:
                 v = 0
             total += v * (2 if c in DOUBLE_CATS else 1)
         return int(total)
 
+    # --- Separatoren: schmale, dunkle Trennzeilen ---
     def _with_separators(df: pd.DataFrame, group_col="crew") -> pd.DataFrame:
+        """Fügt nach jeder Gruppe (Crew) eine schmale Separator-Zeile ein.
+        - Deko-Spalten = " "
+        - Numerische Spalten (Kategorien, Startnummer, TotalWeighted) bleiben None (damit Editor numerisch bleibt)
+        """
         if df.empty:
             return df
         numeric_cols = set([*CATEGORIES, "Startnummer", "TotalWeighted"])
@@ -569,7 +589,7 @@ with tab_map["Daten & Export"]:
         for _, g in df.groupby(group_col, sort=False):
             blocks.append(g)
             sep = {c: None for c in g.columns}
-            sep[group_col] = ""
+            sep[group_col] = ""  # leere Crew → optische Trennung
             for c in deco_cols:
                 sep[c] = " "
             sep["_sep"] = True
@@ -578,9 +598,10 @@ with tab_map["Daten & Export"]:
 
     def _highlight_sep(row):
         if row.get("_sep", False):
-            return ["background-color: #2b2b2b"] * len(row)
+            return ["background-color: #2b2b2b"] * len(row)  # dezent dunkelgrau
         return [""] * len(row)
 
+    # -------- Anzeige / Logik --------
     if df_all.empty:
         st.info("Noch keine Daten vorhanden.")
         st.download_button(
@@ -588,7 +609,6 @@ with tab_map["Daten & Export"]:
             data=df_all.to_csv(index=False).encode("utf-8"),
             file_name="scores_export.csv",
             mime="text/csv",
-            key="dl_empty_csv",
         )
     else:
         # Filter
@@ -608,6 +628,7 @@ with tab_map["Daten & Export"]:
         if round_filter != "Alle":
             df_view = df_view[df_view["round"] == round_filter]
 
+        # Konsistenzableitung (im View, ohne Speichern): setze age_group aus Config & hole Startnummer
         needs_fix_rows = []
         if not df_view.empty:
             new_ag, new_sn, flags = [], [], []
@@ -620,6 +641,7 @@ with tab_map["Daten & Export"]:
             df_view["Startnummer"] = new_sn
             needs_fix_rows = [i for i, f in enumerate(flags) if f]
 
+        # Sortierung & Spalten
         df_view = df_view.sort_values(
             by=["Startnummer", "crew", "judge", "timestamp"],
             ascending=True,
@@ -629,6 +651,7 @@ with tab_map["Daten & Export"]:
         nice_order = ["Startnummer", "age_group", "round", "crew", "judge", "timestamp", *CATEGORIES, "TotalWeighted"]
         df_view = df_view[[c for c in nice_order if c in df_view.columns]]
 
+        # Separatoren + Live-Total (Anzeige)
         df_view["_sep"] = False
         df_sep = _with_separators(df_view, group_col="crew")
 
@@ -638,90 +661,55 @@ with tab_map["Daten & Export"]:
             axis=1,
         )
 
-        # Bearbeitung standardmäßig AKTIV:
-        edit_mode = st.toggle("Bearbeiten aktivieren (nur Kategorien 1–10)", value=True, key="edit_mode_tab2")
+        # -------- Orga: Editor + Vorschau + Speichern --------
+        if orga_mode:
+            edit_mode = st.toggle("Bearbeiten aktivieren (nur Kategorien 1–10)", value=True)
 
-        # Editor (nur Kategorien editierbar)
-        editable_cols = [c for c in CATEGORIES if c in tmp.columns]
-        column_cfg = {
-            "Startnummer": st.column_config.NumberColumn("Startnummer", disabled=True),
-            "age_group": st.column_config.TextColumn("Alterskategorie", disabled=True),
-            "round": st.column_config.TextColumn("Runde", disabled=True),
-            "crew": st.column_config.TextColumn("Crew", disabled=True),
-            "judge": st.column_config.TextColumn("Juror", disabled=True),
-            "timestamp": st.column_config.TextColumn("Zeitstempel", disabled=True),
-            "TotalWeighted": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
-            "_sep": st.column_config.CheckboxColumn("_sep", disabled=True),
-            **{c: st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1) for c in editable_cols},
-        }
+            # Editor (nur Kategorien editierbar)
+            editable_cols = [c for c in CATEGORIES if c in tmp.columns]
+            column_cfg = {
+                "Startnummer": st.column_config.NumberColumn("Startnummer", disabled=True),
+                "age_group": st.column_config.TextColumn("Alterskategorie", disabled=True),
+                "round": st.column_config.TextColumn("Runde", disabled=True),
+                "crew": st.column_config.TextColumn("Crew", disabled=True),
+                "judge": st.column_config.TextColumn("Juror", disabled=True),
+                "timestamp": st.column_config.TextColumn("Zeitstempel", disabled=True),
+                "TotalWeighted": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
+                "_sep": st.column_config.CheckboxColumn("_sep", disabled=True),
+                **{c: st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1) for c in editable_cols},
+            }
+            
 
-        if edit_mode:
             grid = st.data_editor(
                 tmp,
                 use_container_width=True,
                 hide_index=True,
                 column_config=column_cfg,
-                disabled=False,
+                disabled=not edit_mode,
                 key="orga_editor",
             )
-        else:
-            grid = tmp
-            st.dataframe(tmp.style.apply(_highlight_sep, axis=1), use_container_width=True)
 
-        # Live-Total nach Edits neu berechnen
-        grid_preview = (grid.copy() if isinstance(grid, pd.DataFrame) else pd.DataFrame(grid).copy())
-        if "_sep" in grid_preview.columns:
+            # Live-Total nach Edits neu berechnen
+            grid_preview = grid.copy()
             mask_real = ~grid_preview["_sep"].fillna(False)
-        else:
-            mask_real = pd.Series([True] * len(grid_preview))
-        grid_preview.loc[mask_real, "TotalWeighted"] = grid_preview[mask_real].apply(
-            lambda r: _compute_weighted_local(r), axis=1
-        )
+            grid_preview.loc[mask_real, "TotalWeighted"] = grid_preview[mask_real].apply(
+                lambda r: _compute_weighted_local(r), axis=1
+            )
 
-        # Speichern der Kategorie-Edits (überschreibt bestehende Zeile per timestamp+judge)
-        if edit_mode:
-            def _valid_row(rr):
-                for c in CATEGORIES:
-                    try:
-                        v = int(rr[c])
-                        if not (1 <= v <= 10):
-                            return False
-                    except Exception:
-                        return False
-                return True
-
-            invalid_mask = mask_real & (~grid_preview.apply(_valid_row, axis=1))
-            invalid_count = int(invalid_mask.sum())
-
-            col_save, _ = st.columns([1, 5])
-            with col_save:
-                save_disabled = invalid_count > 0
-                if st.button("Änderungen speichern", type="primary", disabled=save_disabled, key="save_edits_tab2"):
-                    edited_df = grid_preview[mask_real].copy()
-                    updates = 0
-                    for _, r in edited_df.iterrows():
-                        backend.update_scores_by_timestamp_and_judge(
-                            ts=str(r.get("timestamp")),
-                            judge=str(r.get("judge")),
-                            new_scores={c: int(r[c]) for c in CATEGORIES}
-                        )
-                        updates += 1
-                    st.success(f"Änderungen gespeichert ({updates} Zeilen aktualisiert).")
-                    st.rerun()
-
-            if invalid_count > 0:
-                st.warning("Bitte alle bearbeiteten Kategorien mit **1–10** füllen (keine leeren/ungültigen Werte).")
+        
 
             # Konsistenz-Fix anbieten, falls nötig
             if needs_fix_rows:
                 st.warning(f"Konsistenz: {len(needs_fix_rows)} Zeile(n) mit fehlender/falscher Startnummer/Alterskategorie erkannt.")
-                if st.button("Konsistenz reparieren & speichern", key="btn_fix_consistency"):
-                    df_fixed = backend.load().copy()
-                    ag_list = []
+                if st.button("Konsistenz reparieren & speichern"):
+                    df_fixed = df_all.copy()
+                    ag_list, sn_list = [], []
                     for _, r in df_fixed.iterrows():
-                        ag_new, _, _ = _derive_ag_sn(r.get("age_group", ""), r.get("crew", ""))
+                        ag_new, sn_new, _ = _derive_ag_sn(r.get("age_group", ""), r.get("crew", ""))
                         ag_list.append(ag_new or r.get("age_group", ""))
+                        sn_list.append(sn_new)
                     df_fixed["age_group"] = ag_list
+                    # TotalWeighted sicher neu berechnen
                     for c in CATEGORIES:
                         if c in df_fixed.columns:
                             df_fixed[c] = pd.to_numeric(df_fixed[c], errors="coerce").fillna(0).astype(int)
@@ -730,20 +718,66 @@ with tab_map["Daten & Export"]:
                     st.success("Konsistenz-Fix gespeichert.")
                     st.rerun()
 
-        # Export (gefiltert, ohne Separatoren)
-        export_df = df_view.copy()
-        csv_bytes = export_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "CSV herunterladen (gefiltert)",
-            data=csv_bytes,
-            file_name="scores_export.csv",
-            mime="text/csv",
-            key="dl_filtered_csv",
-        )
+            # Speichern der Kategorie-Edits (überschreibt bestehende Zeile per timestamp+judge)
+            if edit_mode:
+                def _valid_row(rr):
+                    for c in CATEGORIES:
+                        try:
+                            v = int(rr[c])
+                            if not (1 <= v <= 10):
+                                return False
+                        except Exception:
+                            return False
+                    return True
 
-# ===== TAB 3: ORGA (komplett inkl. Danger-Zone + Backup) =====
-with tab_map["Orga"]:
-    pin_this_tab("Orga", "orga")
+                invalid_mask = mask_real & (~grid_preview.apply(_valid_row, axis=1))
+                invalid_count = int(invalid_mask.sum())
+
+                col_save, _ = st.columns([1, 5])
+                with col_save:
+                    save_disabled = invalid_count > 0
+                    if st.button("Änderungen speichern", type="primary", disabled=save_disabled):
+                        edited_df = grid_preview[mask_real].copy()
+                        updates = 0
+                        for _, r in edited_df.iterrows():
+                            backend.update_scores_by_timestamp_and_judge(
+                                ts=str(r.get("timestamp")),
+                                judge=str(r.get("judge")),
+                                new_scores={c: int(r[c]) for c in CATEGORIES}
+                            )
+                            updates += 1
+                        st.success(f"Änderungen gespeichert ({updates} Zeilen aktualisiert).")
+                        st.rerun()
+
+                if invalid_count > 0:
+                    st.warning("Bitte alle bearbeiteten Kategorien mit **1–10** füllen (keine leeren/ungültigen Werte).")
+
+            # Export (gefiltert, ohne Separatoren)
+            export_df = df_view.copy()
+            csv_bytes = export_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "CSV herunterladen (gefiltert, ohne Separatoren)",
+                data=csv_bytes,
+                file_name="scores_export.csv",
+                mime="text/csv",
+            )
+
+        else:
+            # Nicht-Orga: reine Anzeige mit Separatoren
+            df_pub = df_view.copy()
+            df_pub["_sep"] = False
+            df_pub = _with_separators(df_pub, group_col="crew")
+            st.dataframe(df_pub.style.apply(_highlight_sep, axis=1), use_container_width=True)
+            st.download_button(
+                "CSV herunterladen",
+                data=df_pub.drop(columns=["_sep"], errors="ignore").to_csv(index=False).encode("utf-8"),
+                file_name="scores_export.csv",
+                mime="text/csv",
+            )
+
+
+# ---------- TAB 3: ORGA ----------
+with tabs[3]:
     st.subheader("Orga")
 
     if not orga_mode:
@@ -758,6 +792,7 @@ with tab_map["Orga"]:
             st.warning("Noch keine Juroren in der Config. Füge neue hinzu.")
         st.dataframe(jur_df, use_container_width=True)
 
+        # Juror hinzufügen
         with st.form("add_juror_form"):
             colj1, colj2 = st.columns([2, 1])
             with colj1:
@@ -771,6 +806,7 @@ with tab_map["Orga"]:
                 else:
                     st.error("Bitte Name und 4-stellige PIN angeben.")
 
+        # Juror umbenennen
         if not jur_df.empty:
             with st.form("rename_juror_form"):
                 rcol1, rcol2, _ = st.columns([2, 2, 1])
@@ -788,6 +824,7 @@ with tab_map["Orga"]:
                     else:
                         st.error("Bitte alten Juror wählen und neuen Namen eintragen.")
 
+        # Juror entfernen
         if not jur_df.empty:
             with st.form("remove_juror_form"):
                 dcol1, _ = st.columns([3, 1])
@@ -823,11 +860,13 @@ with tab_map["Orga"]:
             ).sort_values("Startnummer", kind="mergesort")
             st.dataframe(df_crews, use_container_width=True)
 
+            # Crew hinzufügen
             new_crew = st.text_input("Neue Crew hinzufügen", "", key="orga_new_crew")
             if st.button("+ Hinzufügen", key="btn_add_crew", disabled=not new_crew.strip()):
                 cfg.add_crew(ag, new_crew.strip())
                 st.success(f"Crew '{new_crew.strip()}' hinzugefügt. Seite neu laden.")
 
+            # Crew umbenennen
             if current:
                 with st.form("rename_crew_form"):
                     rc1, rc2 = st.columns([2, 2])
@@ -842,6 +881,7 @@ with tab_map["Orga"]:
                         else:
                             st.error("Bitte bestehende Crew wählen und neuen Namen eintragen.")
 
+            # Crew entfernen
             if current:
                 with st.form("remove_crew_form"):
                     dc1, _ = st.columns([3, 1])
