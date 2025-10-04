@@ -343,7 +343,7 @@ def reset_vote_state():
 # --------------------------------------------------------------------
 # Seite konfigurieren
 # --------------------------------------------------------------------
-st.set_page_config(page_title="Scoring 2026", page_icon="logo.png", layout="wide")
+st.set_page_config(page_title="Wertungssystem 2026", page_icon="logo.png", layout="wide")
 
 col_logo, col_title = st.columns([0.15, 0.85])
 with col_logo:
@@ -351,7 +351,7 @@ with col_logo:
 with col_title:
     # kleiner Spacer, damit Text mittiger zum Logo wirkt
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-    st.title("Scoring 2026")
+    st.title("Wertungssystem 2026")
 
 
 
