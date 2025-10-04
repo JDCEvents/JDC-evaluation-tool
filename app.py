@@ -419,7 +419,7 @@ all_set = (
                 "crew": crew,
                 "judge": locked_judge}
         for c in CATEGORIES:
-            row[c] = int(values[c])
+            row[c] = int(values_int[c])
         backend.upsert_row(["round","age_group","crew","judge"], row)
         st.success(f"Bewertung gespeichert: {crew} (Startnr. {cfg.get_start_no(age_group, crew)}), {age_group}, Runde {round_choice}, Juror {locked_judge}.")
         # Nach Speichern alles zurücksetzen, damit nichts „hängen bleibt“
