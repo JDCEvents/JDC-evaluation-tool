@@ -205,6 +205,45 @@ class CSVBackend:
                 df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         df.to_csv(self.path, index=False)
 
+    def update_scores_by_timestamp_and_judge(self, ts: str, judge: str, new_scores: Dict):
+        """
+        Überschreibt NUR die Kategorien (1–10) und TotalWeighted
+        der Zeile mit (timestamp==ts AND judge==judge).
+        Legt KEINE neue Zeile an.
+        """
+        df = self.load()
+        if df.empty:
+            return
+        if "timestamp" not in df.columns or "judge" not in df.columns:
+            return
+
+        mask = (df["timestamp"].astype(str) == str(ts)) & (df["judge"].astype(str) == str(judge))
+        if not mask.any():
+            return
+
+        idx = mask[mask].index[0]
+
+        # Kategorien setzen
+        for c in CATEGORIES:
+            if c in new_scores:
+                try:
+                    df.at[idx, c] = int(new_scores[c])
+                except Exception:
+                    df.at[idx, c] = 0
+
+        # TotalWeighted neu berechnen (gleich wie _compute_weighted)
+        total = 0
+        for c in CATEGORIES:
+            try:
+                v = int(df.at[idx, c])
+            except Exception:
+                v = 0
+            total += v * (2 if c in DOUBLE_CATS else 1)
+        df.at[idx, "TotalWeighted"] = int(total)
+
+        df.to_csv(self.path, index=False)
+
+
 backend = CSVBackend("data.csv")
 
 # --------------------------------------------------------------------
