@@ -369,7 +369,25 @@ else:
     finalists_n = 5  # Default; Orga kann dies im Orga-Modus anpassen
 
 age_groups = cfg.get_age_groups()
-tabs = st.tabs(["Bewerten", "Leaderboard", "Daten & Export", "Orga"])
+
+# Wunsch-Tab aus URL lesen (?tab=Bewerten|Leaderboard|Daten%20%26%20Export|Orga)
+TAB_LABELS = ["Bewerten", "Leaderboard", "Daten & Export", "Orga"]
+tab_qp = (st.query_params.get("tab") or TAB_LABELS[0]).strip()
+if tab_qp not in TAB_LABELS:
+    tab_qp = TAB_LABELS[0]
+
+# Dieses Tab zuerst anordnen → es ist beim Reload aktiv
+ordered = [tab_qp] + [t for t in TAB_LABELS if t != tab_qp]
+tabs = st.tabs(ordered)
+
+# Helfer: „Anheften“-Button oben in jedem Tab einblenden
+def pin_this_tab(tab_name: str, key_suffix: str):
+    col_pin, _ = st.columns([1, 8])
+    with col_pin:
+        if st.button("Ansicht anheften (bei Reload beibehalten)", key=f"pin_{key_suffix}"):
+            st.query_params["tab"] = tab_name
+            st.success("Ansicht angeheftet – Reload bleibt auf dieser Seite.")
+
 
 # ---------- TAB 0: BEWERTEN ----------
 with tabs[0]:
