@@ -1,20 +1,21 @@
-# JDC Evaluation Tool
+# JDC Evaluation Tool v3
 
-Bereit für **Streamlit Community Cloud**. Repo-Name: **JDC-evaluation-tool** (wie gewünscht).
+- **Fester Orga-Link** (vollständig in der Sidebar, wenn `orga_pin` in Secrets gesetzt ist)
+- **5 Jury-Links mit 4-stelligen PINs** (in der Sidebar, Namen + PINs)
+- **Personalisierte Begrüßung**: „Hallo <Name>“
+- **Startnummern** pro Crew (per Reihenfolge vergeben)
+- **Rohdaten-Filter** nach Kids/Juniors/Adults + Sortierung (Startnummer, timestamp, TotalWeighted)
+- **Eingaben sind Pflicht**; Punkte resetten bei Crew-Wechsel
+- **Orga-Tab**: Juroren **bearbeiten** (Namen & PIN), Crews **hinzufügen/umbenennen/entfernen**
 
-## Start (lokal)
-```bash
-pip install -r requirements.txt
-python3 -m streamlit run app.py
+## Secrets (optional in Streamlit Cloud)
+```toml
+base_url = "https://deine-app.streamlit.app"
+orga_pin = "1234"        # damit der Orga-Link in der Sidebar vollständig erscheint
+[judge_pins]             # optional: überschreibt die Pins aus config.json
+Fiona = "1111"
+Cosmo = "2222"
+Paul  = "3333"
+Jason = "4444"
+Ceyda = "5555"
 ```
-
-## Online (Streamlit Cloud)
-1. GitHub öffnen → Repo **JDC-evaluation-tool** → Upload: `app.py`, `requirements.txt`, `README.md`, `juror_offline.html`, `config.json`
-2. share.streamlit.io → **New app** → Repo: *JDC-evaluation-tool*, Branch: *main*, App file: **app.py**
-3. Deploy → du erhältst eine URL wie `https://deinname-jdc-evaluation-tool.streamlit.app`
-4. Juroren-Links: `...?judge=J1` etc. Orga: `...?orga=1`
-
-## Offline-Formular (Fallback)
-- Datei `juror_offline.html` lokal öffnen → Bewertungen offline speichern → CSV exportieren
-- In der Online-App: Tab **Daten & Export** → **Offline-Import (CSV)**
-

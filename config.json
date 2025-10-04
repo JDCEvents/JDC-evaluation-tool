@@ -61,5 +61,27 @@
       "UNCUT",
       "TEAM SELECTED"
     ]
-  }
+  },
+  "jurors": [
+    {
+      "name": "Fiona",
+      "pin": "1148"
+    },
+    {
+      "name": "Cosmo",
+      "pin": "9487"
+    },
+    {
+      "name": "Paul",
+      "pin": "6168"
+    },
+    {
+      "name": "Jason",
+      "pin": "4372"
+    },
+    {
+      "name": "Ceyda",
+      "pin": "0797"
+    }
+  ]
 }
