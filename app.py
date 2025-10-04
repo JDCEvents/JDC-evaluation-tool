@@ -344,26 +344,15 @@ def reset_vote_state():
 # Seite konfigurieren
 # --------------------------------------------------------------------
 st.set_page_config(page_title="Scoring 2026", page_icon="logo.png", layout="wide")
-st.markdown("""
-    <style>
-        .header-container {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-        .header-container img {
-            height: 60px; /* Logo-Größe anpassen */
-        }
-        .header-container h1 {
-            font-size: 2.2rem;
-            margin: 0;
-        }
-    </style>
-    <div class="header-container">
-        <img src="logo.png" alt="Logo">
-        <h1>Scoring 2026</h1>
-    </div>
-""", unsafe_allow_html=True)
+
+col_logo, col_title = st.columns([0.15, 0.85])
+with col_logo:
+    st.image("logo.png", use_container_width=True)
+with col_title:
+    # kleiner Spacer, damit Text mittiger zum Logo wirkt
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    st.title("Scoring 2026")
+
 
 
 
