@@ -677,9 +677,7 @@ with tabs[2]:
                 lambda r: _compute_weighted_local(r), axis=1
             )
 
-            # Vorschau mit grauen Separatoren (read-only, für klare Trennung)
-            st.markdown("**Vorschau (mit Trennzeilen):**")
-            st.dataframe(grid_preview.style.apply(_highlight_sep, axis=1), use_container_width=True)
+        
 
             # Konsistenz-Fix anbieten, falls nötig
             if needs_fix_rows:
