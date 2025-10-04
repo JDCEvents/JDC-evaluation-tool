@@ -286,7 +286,7 @@ def judge_login() -> Optional[str]:
         if pin_input == expected_pin:
             st.session_state["judge_authed_name"] = j_name
             st.success("Erfolgreich angemeldet.")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Falscher PIN.")
     return None
