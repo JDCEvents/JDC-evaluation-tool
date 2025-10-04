@@ -370,15 +370,14 @@ else:
 
 age_groups = cfg.get_age_groups()
 
-# Wunsch-Tab aus URL lesen (?tab=Bewerten|Leaderboard|Daten%20%26%20Export|Orga)
-TAB_LABELS = ["Bewerten", "Leaderboard", "Bewertungen", "Organisation"]
-tab_qp = (st.query_params.get("tab") or TAB_LABELS[0]).strip()
-if tab_qp not in TAB_LABELS:
-    tab_qp = TAB_LABELS[0]
+# Tabs definieren – feste Reihenfolge für Orga vs. Judge
+if orga_mode:
+    TAB_LABELS = ["Bewerten", "Leaderboard", "Bewertungen", "Organisation"]
+else:
+    TAB_LABELS = ["Bewerten", "Bewertungen"]
 
-# Dieses Tab zuerst anordnen → es ist beim Reload aktiv
-ordered = [tab_qp] + [t for t in TAB_LABELS if t != tab_qp]
-tabs = st.tabs(ordered)
+tabs = st.tabs(TAB_LABELS)
+
 
 # Helfer: „Anheften“-Button oben in jedem Tab einblenden
 def pin_this_tab(tab_name: str, key_suffix: str):
@@ -818,7 +817,7 @@ with tabs[2]:
 
 # ---------- TAB 3: ORGA ----------
 with tabs[3]:
-    st.subheader("Orga")
+    st.subheader("Organisation")
 
     if not orga_mode:
         st.info("Orga-Modus aktivieren: URL mit `?orga=1&orgapin=XXXX`.")
