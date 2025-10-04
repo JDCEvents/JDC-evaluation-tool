@@ -669,7 +669,6 @@ with tabs[2]:
                 column_config=column_cfg,
                 disabled=not edit_mode,
                 key="orga_editor",
-                row_styler=_highlight_sep,  # <<< NEU: Separatoren im Editor einfärben
             )
 
             # Live-Total nach Edits neu berechnen
