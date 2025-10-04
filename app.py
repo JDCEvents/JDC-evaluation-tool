@@ -494,18 +494,35 @@ with tabs[2]:
         return int(total)
 
     # --- Separatoren einziehen (schmal, dunkelgrau) ---
-    def _with_separators(df: pd.DataFrame, group_col="crew") -> pd.DataFrame:
-        """Fügt nach jeder Gruppe (Crew) eine schmale Separator-Zeile ein (Crew leer, Rest = ' ')."""
-        if df.empty:
-            return df
-        blocks = []
-        for _, g in df.groupby(group_col, sort=False):
-            blocks.append(g)
-            sep = {c: " " for c in g.columns}
-            sep[group_col] = ""   # Crew leer -> optische Trennung
-            sep["_sep"] = True
-            blocks.append(pd.DataFrame([sep]))
-        return pd.concat(blocks, ignore_index=True)
+def _with_separators(df: pd.DataFrame, group_col="crew") -> pd.DataFrame:
+    """Fügt nach jeder Gruppe (Crew) eine schmale Separator-Zeile ein.
+    - Deko-Spalten = " " (sichtbare Linie)
+    - Numerische Spalten bleiben None, damit editierbar bleibt
+    """
+    if df.empty:
+        return df
+
+    # Spalten-Kategorien bestimmen
+    numeric_cols = set([*CATEGORIES, "Startnummer", "TotalWeighted"])
+    deco_cols = [c for c in df.columns if c not in numeric_cols and c != group_col and c != "_sep"]
+
+    blocks = []
+    for _, g in df.groupby(group_col, sort=False):
+        blocks.append(g)
+
+        # Basis: alles None
+        sep = {c: None for c in g.columns}
+        # Crew leer für die optische Trennung
+        sep[group_col] = ""
+        # Deko-Spalten als Leerzeichen für schmalen grauen Balken
+        for c in deco_cols:
+            sep[c] = " "
+
+        sep["_sep"] = True
+        blocks.append(pd.DataFrame([sep]))
+
+    return pd.concat(blocks, ignore_index=True)
+
 
     # --- Styling: dunkles Grau für Separatorzeilen ---
     def _highlight_sep(row):
