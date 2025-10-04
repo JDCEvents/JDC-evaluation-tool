@@ -281,12 +281,14 @@ def is_orga_mode() -> bool:
 
 # --------------------------------------------------------------------
 # UI-HILFE
-# - reset_vote_state: Setzt alle Kategorien auf '—' (leerer Placeholder).
+# - reset_vote_state (): Setzt alle Kategorie-Felder auf leer (""), damit man per Tab durchspringen kann
 #   → Wird beim Crew-Wechsel genutzt, damit nichts „hängen bleibt“.
 # --------------------------------------------------------------------
 def reset_vote_state():
+    # Setzt alle Kategorie-Felder auf leer (""), damit man per Tab durchspringen kann
     for c in CATEGORIES:
-        st.session_state[f"cat_{c}"] = '—'
+        st.session_state[f"cat_{c}"] = ""
+
 
 # --------------------------------------------------------------------
 # SEITENKONFIG & HEADER
@@ -361,25 +363,53 @@ with tabs[0]:
         reset_vote_state()
         st.session_state["last_crew"] = crew
 
-    # --- Kategorien-Eingabe ---
-    # - Pflichtfelder: Dropdown mit '—' als Placeholder (1..10)
-    st.markdown("### Kategorien (bitte jede Kategorie auswählen)")
-    options = ['—'] + [str(i) for i in range(1,11)]
-    values = {}
-    for c in CATEGORIES:
-        key = f"cat_{c}"
-        if key not in st.session_state:
-            st.session_state[key] = '—'
-        values[c] = st.selectbox(c, options, index=options.index(st.session_state[key]) if st.session_state[key] in options else 0, key=key)
+ # --- Kategorien-Eingabe (nur Tastatur, leere Felder erlaubt) ---
+st.markdown("### Kategorien (bitte jede Kategorie als Zahl 1–10 eingeben)")
+values_raw = {}
+values_int = {}
+invalid_fields = []
 
-    # --- Validierung & Speichern ---
-    # - Button nur aktiv, wenn:
-    #   * Juror via Link korrekt eingeloggt (locked_judge)
-    #   * Crew/Alterskategorie gewählt
-    #   * alle Kategorien != '—'
-    if not locked_judge:
-        st.warning("Bitte öffne deinen persönlichen Link (mit PIN).")
-    all_set = locked_judge is not None and crew and age_group and all(v != '—' for v in values.values())
+def _parse_score(s: str):
+    s = (s or "").strip()
+    if not s:
+        return None
+    if not s.isdigit():
+        return None
+    v = int(s)
+    return v if 1 <= v <= 10 else None
+
+for c in CATEGORIES:
+    key = f"cat_{c}"
+    # Initial leer setzen, wenn noch nicht vorhanden
+    if key not in st.session_state:
+        st.session_state[key] = ""
+    # Textfeld (freie Tastatur-Eingabe), mit Platzhalter
+    values_raw[c] = st.text_input(
+        label=c,
+        value=st.session_state[key],
+        key=key,
+        placeholder="1–10"
+    )
+    parsed = _parse_score(values_raw[c])
+    values_int[c] = parsed
+    if parsed is None:
+        invalid_fields.append(c)
+
+# Hinweis, falls etwas fehlt/ungültig ist
+if invalid_fields:
+    st.info("Bitte alle Kategorien mit Ziffern **1–10** ausfüllen. Offen/ungültig: " + ", ".join(invalid_fields))
+
+# --- Validierung & Speichern ---
+if not locked_judge:
+    st.warning("Bitte öffne deinen persönlichen Link (mit PIN).")
+
+all_set = (
+    locked_judge is not None
+    and crew
+    and age_group
+    and all(values_int[c] is not None for c in CATEGORIES)
+)
+
 
     if st.button("Speichern / Aktualisieren", type="primary", disabled=not all_set):
         # Vote-Zeile bauen
