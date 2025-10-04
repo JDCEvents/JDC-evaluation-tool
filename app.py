@@ -6,6 +6,8 @@
 #   und geben die PIN AUF DER SEITE ein (keine PIN in der URL mehr).
 # - Orga-Modus bleibt via ?orga=1&orgapin=XXXX; nur dort gibt es alle
 #   Admin-Controls (Finalisten N, Links-Übersicht optional, Datenpflege).
+
+# Lets give it a try
 # --------------------------------------------------------------------
 
 import streamlit as st
@@ -167,21 +169,21 @@ class CSVBackend:
         self.path = path
         if not pathlib.Path(self.path).exists():
             df = pd.DataFrame(
-                columns=["timestamp", "round", "age_group", "crew", "judge", *CATEGORIES, "TotalWeighted"]
+                columns=["timestamp", "round", "age_group", "crew", "judge", *CATEGORIES, "Gesamtpunktzahl"]
             )
             df.to_csv(self.path, index=False)
 
     def load(self) -> pd.DataFrame:
         try:
             df = pd.read_csv(self.path)
-            if "TotalWeighted" not in df.columns:
-                df["TotalWeighted"] = 0
+            if "Gesamtpunktzahl" not in df.columns:
+                df["Gesamtpunktzahl"] = 0
             if "age_group" not in df.columns:
                 df["age_group"] = ""
             return df
         except Exception:
             return pd.DataFrame(
-                columns=["timestamp", "round", "age_group", "crew", "judge", *CATEGORIES, "TotalWeighted"]
+                columns=["timestamp", "round", "age_group", "crew", "judge", *CATEGORIES, "Gesamtpunktzahl"]
             )
 
     def _compute_weighted(self, row: Dict) -> int:
@@ -191,7 +193,7 @@ class CSVBackend:
         """Wird beim normalen Speichern (Jury & Orga-Notfall) benutzt:
         aktualisiert nach Key-Kombination oder legt neuen Datensatz an."""
         row = dict(row)
-        row["TotalWeighted"] = self._compute_weighted(row)
+        row["Gesamtpunktzahl"] = self._compute_weighted(row)
         df = self.load()
         if df.empty:
             df = pd.DataFrame([row])
@@ -209,7 +211,7 @@ class CSVBackend:
 
     def update_scores_by_timestamp_and_judge(self, ts: str, judge: str, new_scores: Dict):
         """
-        ORGA-Korrektur: überschreibt NUR die Kategorien (1–10) und TotalWeighted
+        ORGA-Korrektur: überschreibt NUR die Kategorien (1–10) und Gesamtpunktzahl
         der Zeile mit (timestamp==ts AND judge==judge). Legt KEINE neue Zeile an.
         """
         df = self.load()
@@ -232,7 +234,7 @@ class CSVBackend:
                 except Exception:
                     df.at[idx, c] = 0
 
-        # TotalWeighted neu berechnen (gleich wie _compute_weighted)
+        # Gesamtpunktzahl neu berechnen (gleich wie _compute_weighted)
         total = 0
         for c in CATEGORIES:
             try:
@@ -240,7 +242,7 @@ class CSVBackend:
             except Exception:
                 v = 0
             total += v * (2 if c in DOUBLE_CATS else 1)
-        df.at[idx, "TotalWeighted"] = int(total)
+        df.at[idx, "Gesamtpunktzahl"] = int(total)
 
         df.to_csv(self.path, index=False)
 
@@ -593,7 +595,7 @@ with tab_bewertungen:
             Numerische Spalten bleiben None; Deko-Spalten werden ' ' gesetzt."""
             if df.empty:
                 return df
-            numeric_cols = set([*CATEGORIES, "Startnummer", "TotalWeighted"])
+            numeric_cols = set([*CATEGORIES, "Startnummer", "Gesamtpunktzahl"])
             deco_cols = [c for c in df.columns if c not in numeric_cols and c != group_col and c != "_sep"]
 
             blocks = []
@@ -655,7 +657,7 @@ with tab_bewertungen:
                 kind="mergesort",
             ).reset_index(drop=True)
 
-            nice_order = ["Startnummer", "age_group", "round", "crew", "judge", "timestamp", *CATEGORIES, "TotalWeighted"]
+            nice_order = ["Startnummer", "age_group", "round", "crew", "judge", "timestamp", *CATEGORIES, "Gesamtpunktzahl"]
             df_view = df_view[[c for c in nice_order if c in df_view.columns]]
 
             # Separator-Flag
@@ -664,7 +666,7 @@ with tab_bewertungen:
 
             # Totals live berechnen (auch wenn editiert wurde)
             tmp = df_sep.copy()
-            tmp["TotalWeighted"] = tmp.apply(
+            tmp["Gesamtpunktzahl"] = tmp.apply(
                 lambda r: _compute_weighted_local(r) if not (isinstance(r.get("_sep", False), bool) and r["_sep"]) else None,
                 axis=1,
             )
@@ -681,7 +683,7 @@ with tab_bewertungen:
                 "crew": st.column_config.TextColumn("Crew", disabled=True),
                 "judge": st.column_config.TextColumn("Juror", disabled=True),
                 "timestamp": st.column_config.TextColumn("Zeitstempel", disabled=True),
-                "TotalWeighted": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
+                "Gesamtpunktzahl": st.column_config.NumberColumn("Total (gewichtet)", disabled=True),
                 "_sep": st.column_config.CheckboxColumn("_sep", disabled=True),
                 **{c: st.column_config.NumberColumn(c, min_value=1, max_value=10, step=1) for c in editable_cols},
             }
@@ -706,7 +708,7 @@ with tab_bewertungen:
                 mask_real = ~grid_preview["_sep"].fillna(False)
             else:
                 mask_real = pd.Series([True] * len(grid_preview))
-            grid_preview.loc[mask_real, "TotalWeighted"] = grid_preview[mask_real].apply(
+            grid_preview.loc[mask_real, "Gesamtpunktzahl"] = grid_preview[mask_real].apply(
                 lambda r: _compute_weighted_local(r), axis=1
             )
 
@@ -755,11 +757,11 @@ with tab_bewertungen:
                             ag_list.append(ag_new or r.get("age_group", ""))
                             sn_list.append(sn_new)
                         df_fixed["age_group"] = ag_list
-                        # TotalWeighted sicher neu berechnen
+                        # Gesamtpunktzahl sicher neu berechnen
                         for c in CATEGORIES:
                             if c in df_fixed.columns:
                                 df_fixed[c] = pd.to_numeric(df_fixed[c], errors="coerce").fillna(0).astype(int)
-                        df_fixed["TotalWeighted"] = df_fixed.apply(_compute_weighted_local, axis=1)
+                        df_fixed["Gesamtpunktzahl"] = df_fixed.apply(_compute_weighted_local, axis=1)
                         pathlib.Path(backend.path).write_text(df_fixed.to_csv(index=False), encoding="utf-8")
                         st.success("Konsistenz-Fix gespeichert.")
                         st.rerun()
@@ -811,7 +813,7 @@ with tab_bewertungen:
                     ).reset_index(drop=True)
 
                     # Nur relevante Spalten anzeigen (keine Separatoren, keine Editierung)
-                    nice_order = ["Startnummer", "age_group", "round", "crew", "timestamp", *CATEGORIES, "TotalWeighted"]
+                    nice_order = ["Startnummer", "age_group", "round", "crew", "timestamp", *CATEGORIES, "Gesamtpunktzahl"]
                     df_judge = df_judge[[c for c in nice_order if c in df_judge.columns]]
 
                     st.dataframe(df_judge, use_container_width=True)
@@ -1024,7 +1026,7 @@ if orga_mode:
                 try:
                     _df_backup = backend.load().copy()
                 except Exception:
-                    _df_backup = pd.DataFrame(columns=["timestamp","round","age_group","crew","judge", *CATEGORIES, "TotalWeighted"])
+                    _df_backup = pd.DataFrame(columns=["timestamp","round","age_group","crew","judge", *CATEGORIES, "Gesamtpunktzahl"])
                 csv_backup = _df_backup.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     "⬇️ Aktuelle Daten als CSV sichern (empfohlen)",
