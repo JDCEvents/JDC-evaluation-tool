@@ -246,6 +246,40 @@ class CSVBackend:
 
         df.to_csv(self.path, index=False)
 
+    def delete_row_by_keys(self, round_value: str, age_group: str, crew: str, judge: str) -> int:
+        """
+        Löscht die Bewertung mit genau dieser Kombination.
+        Rückgabewert:
+            1  -> eine Zeile wurde gelöscht
+            0  -> es wurde keine passende Zeile gefunden (nichts gelöscht)
+
+        Warum diese 4 Schlüssel?
+        - In deiner App wird pro (round, age_group, crew, judge) genau EINE Bewertung gehalten (upsert_row).
+        - Deshalb reicht es, genau nach dieser Kombination zu filtern.
+        """
+        # Aktuelle Daten laden
+        df = self.load()
+        if df.empty:
+            return 0
+
+        # Schutz: Spalten als string vergleichen, damit "1" == 1 o. ä. nicht schiefgeht
+        mask = (
+            (df["round"].astype(str) == str(round_value)) &
+            (df["age_group"].astype(str) == str(age_group)) &
+            (df["crew"].astype(str) == str(crew)) &
+            (df["judge"].astype(str) == str(judge))
+        )
+
+        # Wieviele Zeilen sind betroffen? (sollte 0 oder 1 sein)
+        deleted = int(mask.sum())
+
+        # Nur wenn es etwas zu löschen gibt, schreiben wir die CSV neu
+        if deleted > 0:
+            df = df[~mask]
+            df.to_csv(self.path, index=False)
+
+        return deleted
+
 backend = CSVBackend("data.csv")
 
 
