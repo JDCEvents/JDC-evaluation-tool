@@ -295,8 +295,10 @@ def judge_login() -> Optional[str]:
 # UI-Helfer
 # --------------------------------------------------------------------
 def reset_vote_state():
+    # Statt Keys aktiv auf "" zu setzen (führt in Streamlit 1.50 zu Problemen),
+    # löschen wir sie einfach. Beim nächsten Rendern starten die Felder automatisch leer.
     for c in CATEGORIES:
-        st.session_state[f"cat_{c}"] = ""
+        st.session_state.pop(f"cat_{c}", None)
 
 # --------------------------------------------------------------------
 # Seite konfigurieren
