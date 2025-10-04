@@ -370,13 +370,14 @@ else:
 
 age_groups = cfg.get_age_groups()
 
-# Tabs definieren – feste Reihenfolge für Orga vs. Judge
+# Tabs definieren – feste Reihenfolge für Orga vs. Judge (benannte Variablen statt Indizes)
 if orga_mode:
-    TAB_LABELS = ["Bewerten", "Leaderboard", "Bewertungen", "Organisation"]
+    tab_bewerten, tab_leaderboard, tab_bewertungen, tab_orga = st.tabs(
+        ["Bewerten", "Leaderboard", "Bewertungen", "Organisation"]
+    )
 else:
-    TAB_LABELS = ["Bewerten", "Bewertungen"]
+    tab_bewerten, tab_bewertungen = st.tabs(["Bewerten", "Bewertungen"])
 
-tabs = st.tabs(TAB_LABELS)
 
 
 # Helfer: „Anheften“-Button oben in jedem Tab einblenden
@@ -388,8 +389,8 @@ def pin_this_tab(tab_name: str, key_suffix: str):
             st.success("Ansicht angeheftet – Reload bleibt auf dieser Seite.")
 
 
-# ---------- TAB 0: BEWERTEN ----------
-with tabs[0]:
+# ---------- TAB: BEWERTEN ----------
+with tab_bewerten:
     st.subheader("Bewertung abgeben")
 
     # Nicht-Orga: erst PIN-Login (privater Link ?judge=Name)
@@ -486,8 +487,9 @@ with tabs[0]:
             )
             reset_vote_state()
 
-# ---------- TAB 1: LEADERBOARD ----------
-with tabs[1]:
+# ---------- TAB: LEADERBOARD (nur Orga) ----------
+if orga_mode:
+    with tab_leaderboard:
     st.subheader("Leaderboard")
     df_all = backend.load()
     colf1, colf2 = st.columns([1, 2])
@@ -519,8 +521,8 @@ with tabs[1]:
         winner = board.iloc[0]
         st.markdown(f"🏆 **Sieger Zwischenrunde ({age_view})**: **{winner['Crew']}** (Total {int(winner['Total'])}) → **Finale**")
 
-# ---------- TAB 2: DATEN & EXPORT ----------
-with tabs[2]:
+# ---------- TAB: BEWERTUNGEN ----------
+with tab_bewertungen:
     st.subheader("Bewertungen")
 
     df_all = backend.load().copy()
@@ -813,10 +815,11 @@ with tabs[2]:
                     )
                 else:
                     st.info("Keine Bewertungen für die gewählten Filter vorhanden.")
-# ---------- TAB 3: ORGA ----------
 
-# ---------- TAB 3: ORGA ----------
-with tabs[3]:
+# ---------- TAB 3: ORGANISATION ----------
+if orga_mode:
+    with tab_orga:
+
     st.subheader("Organisation")
 
     if not orga_mode:
